@@ -37,3 +37,6 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+
+MQ_output_txt.zip
+MQ_output_txt/**

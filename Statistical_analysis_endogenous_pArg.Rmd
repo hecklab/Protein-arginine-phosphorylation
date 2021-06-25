@@ -1,0 +1,702 @@
+---
+title: "Endgenous_pArg_anlysis"
+author: "Nadine Prust"
+date: "4/13/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Phosphosite distribution
+
+All necessary data is deposited on Pride and can be downloaded. The used files for this script can be found in the MQ_output_txt.zip file. Add the MQ_output_txt folder then to your project folder to access the required data.
+
+```{r}
+library(stringr)
+library(reshape2)
+library(ggplot2)
+library(psych)
+library(dplyr)
+library(ggpubr)
+```
+
+Read Phospho (RHSTY)Sites.txt from MaxQuant (v1.6.3.4) from individual searcher for the three mutants
+
+```{r}
+phospho_Stp1 <- read.delim("./pArg_proteins/Phospho (RHSTY)Sites_Stp1.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+
+phospho_Stk1 <- read.delim("./pArg_proteins/Phospho (RHSTY)Sites_Stk1.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+phospho_SdrE <- read.delim("./pArg_proteins/Phospho (RHSTY)Sites_SdrE.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+
+```
+
+Extract important columns and filter for Reverse and Potential contaminants
+
+```{r}
+phospho.Stk1 <- phospho_Stk1[, c("Protein", "Amino.acid", "Positions.within.proteins", "Number.of.Phospho..RHSTY.",
+                                 "Intensity.Stk1_1", "Intensity.Stk1_2", "Intensity.Stk1_3", "Intensity.Stk1_4",
+                                 "Delta.score", "Localization.prob", "Sequence.window", "Reverse", "Potential.contaminant",
+                                 "Localization.prob.Stk1_1", "Localization.prob.Stk1_2", "Localization.prob.Stk1_3", 
+                                 "Localization.prob.Stk1_4", "Diagnostic.peak")]
+phospho.Stk1 <- phospho.Stk1[phospho.Stk1$Reverse != "+",]
+phospho.Stk1 <- phospho.Stk1[phospho.Stk1$Potential.contaminant != "+",]
+
+class1.Stk1 <- phospho.Stk1[phospho.Stk1$Localization.prob >=0.75,]
+
+phospho.Stp1 <- phospho_Stp1[, c("Protein", "Amino.acid", "Positions.within.proteins", "Number.of.Phospho..RHSTY.",
+                                 "Intensity.Stp1_1", "Intensity.Stp1_2", "Intensity.Stp1_3", "Intensity.Stp1_4",
+                                 "Delta.score", "Localization.prob", "Sequence.window", "Reverse", "Potential.contaminant",
+                                 "Localization.prob.Stp1_1", "Localization.prob.Stp1_2", "Localization.prob.Stp1_3", 
+                                 "Localization.prob.Stp1_4", "Diagnostic.peak")]
+phospho.Stp1 <- phospho.Stp1[phospho.Stp1$Reverse != "+",]
+phospho.Stp1 <- phospho.Stp1[phospho.Stp1$Potential.contaminant != "+",]
+
+class1.Stp1 <- phospho.Stk1[phospho.Stp1$Localization.prob >=0.75,]
+
+
+phospho.SdrE <- phospho_SdrE[, c("Protein", "Amino.acid", "Positions.within.proteins", "Number.of.Phospho..RHSTY.",
+                                 "Intensity.SdrE_1", "Intensity.SdrE_2", "Intensity.SdrE_3", "Intensity.SdrE_4",
+                                 "Delta.score", "Localization.prob", "Sequence.window", "Reverse", "Potential.contaminant",
+                                 "Localization.prob.SdrE_1", "Localization.prob.SdrE_2", "Localization.prob.SdrE_3", 
+                                 "Localization.prob.SdrE_4", "Diagnostic.peak")]
+phospho.SdrE <- phospho.SdrE[phospho.SdrE$Reverse != "+",]
+phospho.SdrE <- phospho.SdrE[phospho.SdrE$Potential.contaminant != "+",]
+
+class1.SdrE <- phospho.SdrE[phospho.SdrE$Localization.prob >=0.75,]
+
+
+```
+
+Calculate frequency of all 20 amino acids in the S. aureus proteome USA300 (reviewed entries) as well as the proteomes identified based on the full proteome analysis
+
+```{r}
+proteome.SdrE <- read.csv("MQ_output_txt/Endogenous_data/SdrE_proteome.tab", sep="\t",header=T, stringsAsFactors = FALSE)  #fill in the name of your proteome file here
+proteome.Stp1<- read.csv(".MQ_output_txt/Endogenous_data/Stp1_proteome.tab", sep="\t",header=T, stringsAsFactors = FALSE)  #fill in the name of your proteome file here
+proteome.Stk1 <- read.csv("MQ_output_txt/Endogenous_data/Stk1_proteome.tab", sep="\t",header=T, stringsAsFactors = FALSE)  #fill in the name of your proteome file here
+proteome.USA300 <- read.csv("MQ_output_txt/Endogenous_data/uniprot-usa300-filtered-reviewed_yes.tab", sep="\t",header=T, stringsAsFactors = FALSE)  #fill in the name of your proteome file here
+
+#all sequences are in the tab called 'Sequence', this may need changing if your db is structured differently
+
+AA <- c("A", "C", "D", "E", "F", "G", "H", "I", "K", "L", "M", "N", "P", "Q", "R", "S", "T", "V", "W", "Y") #list of 20 AAs
+
+#To calculate frequency, we will loop through each of these amino acids and count their occurance in the proteome.
+#We keep count in Absolute, as defined below.
+
+Absolute.Stp1 <- c()
+
+for(i in 1:length(AA)){
+  
+  Absolute.Stp1[i] <- sum(unlist(strsplit(proteome.Stp1$Sequence, "")) == AA[i])
+  
+  
+}
+
+Absolute.Stk1 <- c()
+
+for(i in 1:length(AA)){
+  
+  Absolute.Stk1[i] <- sum(unlist(strsplit(proteome.Stk1$Sequence, "")) == AA[i])
+  
+  
+}
+
+Absolute.SdrE <- c()
+
+for(i in 1:length(AA)){
+  
+  Absolute.SdrE[i] <- sum(unlist(strsplit(proteome.SdrE$Sequence, "")) == AA[i])
+  
+  
+}
+
+Absolute.USA300 <- c()
+
+for(i in 1:length(AA)){
+  
+  Absolute.USA300[i] <- sum(unlist(strsplit(proteome.USA300$Sequence, "")) == AA[i])
+  
+  
+}
+#next, calculate frequencies:
+
+freq.Stp1 <- Absolute.Stp1/sum(Absolute.Stp1)
+freq.Stk1 <- Absolute.Stk1/sum(Absolute.Stk1)
+freq.SdrE <- Absolute.SdrE/sum(Absolute.SdrE)
+freq.USA300 <- Absolute.USA300/sum(Absolute.USA300)
+
+
+Stp1.aa.occurence <- cbind.data.frame(AA, Absolute.Stp1, freq.Stp1)
+Stk1.aa.occurence <- cbind.data.frame(AA, Absolute.Stk1, freq.Stk1)
+SdrE.aa.occurence <- cbind.data.frame(AA, Absolute.SdrE, freq.SdrE)
+USA300.aa.occurence <- cbind.data.frame(AA, Absolute.USA300, freq.USA300)
+
+```
+Count the occurrences of pSer, pThr, pTyr, pHis and pArg in the three different mutants and normalize it with the occurrences in the USA300 proteome or mutant specific proteome
+
+```{r}
+SdrE.distribution <- data.frame(
+  category=c("pS", "pT", "pY", "pH", "pR"),
+  count=c(nrow(phospho.SdrE[phospho.SdrE$Amino.acid == "S",]), nrow(phospho.SdrE[phospho.SdrE$Amino.acid == "T",]), 
+          nrow(phospho.SdrE[phospho.SdrE$Amino.acid == "Y",]), nrow(phospho.SdrE[phospho.SdrE$Amino.acid == "H",]),
+          nrow(phospho.SdrE[phospho.SdrE$Amino.acid == "R",]))
+)
+
+Stp1.distribution <- data.frame(
+  category=c("pS", "pT", "pY", "pH", "pR"),
+  count=c(nrow(phospho.Stp1[phospho.Stp1$Amino.acid == "S",]), nrow(phospho.Stp1[phospho.Stp1$Amino.acid == "T",]), 
+          nrow(phospho.Stp1[phospho.Stp1$Amino.acid == "Y",]), nrow(phospho.Stp1[phospho.Stp1$Amino.acid == "H",]),
+          nrow(phospho.Stp1[phospho.Stp1$Amino.acid == "R",]))
+)
+
+Stk1.distribution <- data.frame(
+  category=c("pS", "pT", "pY", "pH", "pR"),
+  count=c(nrow(phospho.Stk1[phospho.Stk1$Amino.acid == "S",]), nrow(phospho.Stk1[phospho.Stk1$Amino.acid == "T",]), 
+          nrow(phospho.Stk1[phospho.Stk1$Amino.acid == "Y",]), nrow(phospho.Stk1[phospho.Stk1$Amino.acid == "H",]),
+          nrow(phospho.Stk1[phospho.Stk1$Amino.acid == "R",]))
+)
+#set levels on category
+SdrE.distribution$category.ordered <- factor(SdrE.distribution$category, levels = SdrE.distribution$category)
+Stp1.distribution$category.ordered <- factor(Stp1.distribution$category, levels = Stp1.distribution$category)
+Stk1.distribution$category.ordered <- factor(Stk1.distribution$category, levels = Stk1.distribution$category)
+
+#add occurrence of AA in the full proteome
+SdrE.distribution$Occurence.proteome <- c(USA300.aa.occurence[USA300.aa.occurence$AA == "S", "Absolute.USA300"],
+                                          USA300.aa.occurence[USA300.aa.occurence$AA == "T", "Absolute.USA300"],
+                                          USA300.aa.occurence[USA300.aa.occurence$AA == "Y", "Absolute.USA300"],
+                                          USA300.aa.occurence[USA300.aa.occurence$AA == "H", "Absolute.USA300"],
+                                          USA300.aa.occurence[USA300.aa.occurence$AA == "R", "Absolute.USA300"]) 
+
+Stp1.distribution$Occurence.proteome <- c(USA300.aa.occurence[USA300.aa.occurence$AA == "S", "Absolute.USA300"],
+                                                          USA300.aa.occurence[USA300.aa.occurence$AA == "T", "Absolute.USA300"],
+                                                          USA300.aa.occurence[USA300.aa.occurence$AA == "Y", "Absolute.USA300"],
+                                                          USA300.aa.occurence[USA300.aa.occurence$AA == "H", "Absolute.USA300"],
+                                                          USA300.aa.occurence[USA300.aa.occurence$AA == "R", "Absolute.USA300"]) 
+
+Stk1.distribution$Occurence.proteome <- c(USA300.aa.occurence[USA300.aa.occurence$AA == "S", "Absolute.USA300"],
+                                          USA300.aa.occurence[USA300.aa.occurence$AA == "T", "Absolute.USA300"],
+                                          USA300.aa.occurence[USA300.aa.occurence$AA == "Y", "Absolute.USA300"],
+                                          USA300.aa.occurence[USA300.aa.occurence$AA == "H", "Absolute.USA300"],
+                                          USA300.aa.occurence[USA300.aa.occurence$AA == "R", "Absolute.USA300"]) 
+
+
+
+
+#add occurrence of AA based on measured full proteome
+
+SdrE.distribution$Occurence.mutant <- c(SdrE.aa.occurence[SdrE.aa.occurence$AA == "S", "Absolute.SdrE"],
+                                        SdrE.aa.occurence[SdrE.aa.occurence$AA == "T", "Absolute.SdrE"],
+                                        SdrE.aa.occurence[SdrE.aa.occurence$AA == "Y", "Absolute.SdrE"],
+                                        SdrE.aa.occurence[SdrE.aa.occurence$AA == "H", "Absolute.SdrE"],
+                                        SdrE.aa.occurence[SdrE.aa.occurence$AA == "R", "Absolute.SdrE"]) 
+
+
+Stp1.distribution$Occurence.mutant <- c(Stp1.aa.occurence[Stp1.aa.occurence$AA == "S", "Absolute.Stp1"],
+                                                        Stp1.aa.occurence[Stp1.aa.occurence$AA == "T", "Absolute.Stp1"],
+                                                        Stp1.aa.occurence[Stp1.aa.occurence$AA == "Y", "Absolute.Stp1"],
+                                                        Stp1.aa.occurence[Stp1.aa.occurence$AA == "H", "Absolute.Stp1"],
+                                                        Stp1.aa.occurence[Stp1.aa.occurence$AA == "R", "Absolute.Stp1"]) 
+
+Stk1.distribution$Occurence.mutant <- c(Stk1.aa.occurence[Stk1.aa.occurence$AA == "S", "Absolute.Stk1"],
+                                        Stk1.aa.occurence[Stk1.aa.occurence$AA == "T", "Absolute.Stk1"],
+                                        Stk1.aa.occurence[Stk1.aa.occurence$AA == "Y", "Absolute.Stk1"],
+                                        Stk1.aa.occurence[Stk1.aa.occurence$AA == "H", "Absolute.Stk1"],
+                                        Stk1.aa.occurence[Stk1.aa.occurence$AA == "R", "Absolute.Stk1"]) 
+
+#normalize the occurrence based on full proteome occurrence
+SdrE.distribution$normalized.count <- SdrE.distribution$count/SdrE.distribution$Occurence.proteome
+Stp1.distribution$normalized.count <- Stp1.distribution$count/Stp1.distribution$Occurence.proteome
+Stk1.distribution$normalized.count <- Stk1.distribution$count/Stk1.distribution$Occurence.proteome
+
+#normalize the occurrence based on mutant proteome occurrence
+SdrE.distribution$normalized.count.mutant <- SdrE.distribution$count/SdrE.distribution$Occurence.mutant
+Stp1.distribution$normalized.count.mutant <- Stp1.distribution$count/Stp1.distribution$Occurence.mutant
+Stk1.distribution$normalized.count.mutant <- Stk1.distribution$count/Stk1.distribution$Occurence.mutant
+
+##calculate pc
+SdrE.distribution$fraction <- SdrE.distribution$count / sum(SdrE.distribution$count)
+SdrE.distribution$fraction.normalized <- SdrE.distribution$normalized.count / sum(SdrE.distribution$normalized.count)
+SdrE.distribution$fraction.normalized.mutant <- SdrE.distribution$normalized.count.mutant / sum(SdrE.distribution$normalized.count.mutant)
+
+SdrE.distribution$pc <- round(SdrE.distribution$fraction*100, digits = 1)
+SdrE.distribution$pc.normalized <- round(SdrE.distribution$fraction.normalized*100, digits = 1)
+SdrE.distribution$pc.normalized.mutant <- round(SdrE.distribution$fraction.normalized.mutant*100, digits = 1)
+SdrE.distribution$Mutant <- "SdrE"
+
+
+Stp1.distribution$fraction <- Stp1.distribution$count / sum(Stp1.distribution$count)
+Stp1.distribution$fraction.normalized <- Stp1.distribution$normalized.count / sum(Stp1.distribution$normalized.count)
+Stp1.distribution$fraction.normalized.mutant <- Stp1.distribution$normalized.count.mutant / sum(Stp1.distribution$normalized.count.mutant)
+
+Stp1.distribution$pc <- round(Stp1.distribution$fraction*100, digits = 1)
+Stp1.distribution$pc.normalized <- round(Stp1.distribution$fraction.normalized*100, digits = 1)
+Stp1.distribution$pc.normalized.mutant <- round(Stp1.distribution$fraction.normalized.mutant*100, digits = 1)
+Stp1.distribution$Mutant <- "Stp1"
+
+Stk1.distribution$fraction <- Stk1.distribution$count / sum(Stk1.distribution$count)
+Stk1.distribution$fraction.normalized <- Stk1.distribution$normalized.count / sum(Stk1.distribution$normalized.count)
+Stk1.distribution$fraction.normalized.mutant <- Stk1.distribution$normalized.count.mutant / sum(Stk1.distribution$normalized.count.mutant)
+
+Stk1.distribution$pc <- round(Stk1.distribution$fraction*100, digits = 1)
+Stk1.distribution$pc.normalized <- round(Stk1.distribution$fraction.normalized*100, digits = 1)
+Stk1.distribution$pc.normalized.mutant <- round(Stk1.distribution$fraction.normalized.mutant*100, digits = 1)
+Stk1.distribution$Mutant <- "Stk1"
+
+
+```
+Prepare data for doughnut chart for phosphosite distribution
+
+```{r}
+# Calculate the cumulative percentages (top of each rectangle)
+SdrE.distribution$ymax <- cumsum(SdrE.distribution$fraction)
+
+Stp1.distribution$ymax <- cumsum(Stp1.distribution$fraction)
+
+Stk1.distribution$ymax <- cumsum(Stk1.distribution$fraction)
+
+
+# Compute the bottom of each rectangle
+SdrE.distribution$ymin <- c(0, head(SdrE.distribution$ymax, n=-1))
+Stp1.distribution$ymin <- c(0, head(Stp1.distribution$ymax, n=-1))
+Stk1.distribution$ymin <- c(0, head(Stk1.distribution$ymax, n=-1))
+
+# Compute label position
+SdrE.distribution$labelPosition <- (SdrE.distribution$ymax + SdrE.distribution$ymin) / 2
+Stp1.distribution$labelPosition <- (Stp1.distribution$ymax + Stp1.distribution$ymin) / 2
+Stk1.distribution$labelPosition <- (Stk1.distribution$ymax + Stk1.distribution$ymin) / 2
+
+
+#Compute a good label
+SdrE.distribution$label <- paste0(SdrE.distribution$category, "\n ", SdrE.distribution$normalized.count, "\n ", SdrE.distribution$pc, "%")
+Stp1.distribution$label <- paste0(Stp1.distribution$category, "\n ", Stp1.distribution$normalized.count, "\n ", Stp1.distribution$pc, "%")
+Stk1.distribution$label <- paste0(Stk1.distribution$category, "\n ", Stk1.distribution$normalized.count, "\n ", Stk1.distribution$pc, "%")
+
+
+
+# Make the plot
+
+SdrE.dis <-   
+  ggplot(SdrE.distribution, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category.ordered)) +
+  geom_rect() +
+  geom_text( x=4.5, aes(y=labelPosition, label=label), size=3, ) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#b3cde3","#8c96c6", "#8856a7" , "#810f7c", "#210320")) +
+  coord_polar(theta="y") +
+  xlim(c(0, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+Stp1.dis <-   
+  ggplot(Stp1.distribution, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category.ordered)) +
+  geom_rect() +
+  geom_text( x=4.5, aes(y=labelPosition, label=label), size=3, ) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#b3cde3","#8c96c6", "#8856a7" , "#810f7c", "#210320")) +
+  coord_polar(theta="y") +
+  xlim(c(0, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+
+Stk1.dis <-   
+  ggplot(Stk1.distribution, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category.ordered)) +
+  geom_rect() +
+  geom_text( x=4.5, aes(y=labelPosition, label=label), size=3, ) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#b3cde3","#8c96c6", "#8856a7" , "#810f7c", "#210320")) +
+  coord_polar(theta="y") +
+  xlim(c(0, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+
+
+## Statistical analysis of the three mutants Stp1, Stk1 and SdrE
+
+
+Read Phospho (RHSTY).txt from combined MaxQuant (v1.6.3.4) search and read uniprot list containing protein names
+
+```{r}
+phospho_RHSTY <- read.delim("MQ_output_txt/Endogenous_data/LFQ_Saureus/txt/Phospho (RHSTY)Sites_exp7.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+uniprotname <- read.delim("MQ_output_txt/Endogenous_data/LFQ_Saureus/txt/uniprot_list_pRHSTY.txt", header = TRUE, stringsAsFactors = FALSE)
+
+```
+
+Extract important columns and filter data
+
+```{r}
+pRHSTY.not.filtered<- phospho_RHSTY[, c("Protein","Amino.acid", "Positions.within.proteins", "Number.of.Phospho..RHSTY.",
+                         "Intensity.SdrE_1", "Intensity.SdrE_2", "Intensity.SdrE_3", "Intensity.SdrE_4",
+                         "Intensity.Stk1_1", "Intensity.Stk1_2", "Intensity.Stk1_3", "Intensity.Stk1_4",
+                         "Intensity.Stp1_1", "Intensity.Stp1_2", "Intensity.Stp1_3", "Intensity.Stp1_4", "Delta.score",
+                         "Localization.prob", "Sequence.window",
+                         "Reverse", "Potential.contaminant",
+                         "Localization.prob.SdrE_1","Localization.prob.SdrE_2", "Localization.prob.SdrE_3", "Localization.prob.SdrE_4", 
+                         "Localization.prob.Stk1_1", "Localization.prob.Stk1_2", "Localization.prob.Stk1_3", "Localization.prob.Stk1_4",
+                         "Localization.prob.Stp1_1", "Localization.prob.Stp1_2", "Localization.prob.Stp1_3", "Localization.prob.Stp1_4",
+                         "Best.localization.evidence.ID", "Best.localization.raw.file", "Best.localization.scan.number"
+                         
+)]
+# removing reversed and contaminants
+
+
+pRHSTY <- pRHSTY.not.filtered[pRHSTY.not.filtered$Reverse != "+",]
+pRHSTY <- pRHSTY.not.filtered[pRHSTY.not.filtered$Potential.contaminant != "+",]
+
+#filter for localization prob of >= 0.75
+
+pRHSTY <- pRHSTY[pRHSTY$Localization.prob >= 0.75,]
+
+```
+
+Perform log2 transformation and median normalization of the intensities
+
+```{r}
+pRHSTY[,grep("Intensity.*", colnames(pRHSTY))] <- apply(pRHSTY[,grep("Intensity.*", colnames(pRHSTY))], 2, FUN=log2 )
+
+#### change -Inf to NA
+
+intensitycolumns <- grep("Intensity.*", colnames(pRHSTY))               # take all columns containing LFQ in their header
+# apply log transformation on all intensity
+pRHSTY[,intensitycolumns] <- apply(pRHSTY[, intensitycolumns], 2, function(x) { x[is.infinite(x)] <- NA; x})  
+
+### median normalization - calculate median per sample (on column) and substract it from ech row
+
+pRHSTY[,intensitycolumns] <- apply(pRHSTY[, intensitycolumns], 2, function(x) {x- median(x, na.rm = TRUE)}) 
+
+
+### calculate avg
+
+pRHSTY$SdrE <- rowMeans(pRHSTY[,grep("Intensity.SdrE", colnames(pRHSTY))], na.rm = TRUE)
+pRHSTY$Stk1 <- rowMeans(pRHSTY[,grep("Intensity.Stk1", colnames(pRHSTY))], na.rm = TRUE)
+pRHSTY$Stp1 <- rowMeans(pRHSTY[,grep("Intensity.Stp1", colnames(pRHSTY))], na.rm = TRUE)
+
+###count NA per replicate
+
+pRHSTY$NA_SdrE <- apply(pRHSTY[,grep("Intensity.SdrE", colnames(pRHSTY))],1,function(x) sum(is.na(x)))
+
+pRHSTY$NA_Stk1 <- apply(pRHSTY[,grep("Intensity.Stk1", colnames(pRHSTY))],1,function(x) sum(is.na(x)))
+
+pRHSTY$NA_Stp1 <- apply(pRHSTY[,grep("Intensity.Stp1", colnames(pRHSTY))],1,function(x) sum(is.na(x)))
+```
+
+Filter data for valid values: 3x in at least one group and 2x in one other group
+
+```{r}
+pRHSTY.filtered <- pRHSTY[(pRHSTY$NA_SdrE <=1 & pRHSTY$NA_Stk1 <=2 | pRHSTY$NA_SdrE <=1 & pRHSTY$NA_Stp1 <=2 |
+                           pRHSTY$NA_Stk1 <=1 & pRHSTY$NA_Stp1 <=2 | pRHSTY$NA_SdrE <=2 & pRHSTY$NA_Stk1 <=1 |
+                           pRHSTY$NA_SdrE <=2 & pRHSTY$NA_Stp1 <=1 |pRHSTY$NA_Stk1 <=2 & pRHSTY$NA_Stp1 <=1 ),]
+```
+
+Assign row names based on protein name
+
+```{r}
+pRHSTY.filtered$name <- paste(pRHSTY.filtered$Protein, pRHSTY.filtered$Amino.acid, 
+                             pRHSTY.filtered$Positions.within.proteins, sep = ";")
+rownames(pRHSTY.filtered) <- pRHSTY.filtered[, "name"]
+```
+
+Check quality of the data: Normal distribution
+
+```{r}
+multiscatterplot <- function(df, filename){
+  pdf(filename)
+  pairs.panels(df,
+               smooth=FALSE,
+               method = "pearson", 
+               density=FALSE,
+               ellipses=FALSE,
+               pch=19,
+               cex=0.2,
+               cex.cor = 1,
+               hist.col = "grey",
+               digits = 3,
+               rug=FALSE,
+               main = "Pearson correlation")
+  
+  dev.off()
+}
+
+multiscatterplot(pRHSTY.filtered[,5:16], "Multiscatterplot_exp7_phospho_locprob.pdf")
+
+###plot intensity distribution to check for normal distribution
+
+Intensity <- pRHSTY.filtered[,intensitycolumns]                                                      # index all lfq coumns
+Intensity$protein <- rownames(Intensity)                                                         # assign rownames
+Intensity<-melt(Intensity) 
+
+
+ggplot(Intensity, aes(x = value)) +
+  geom_histogram(aes(fill = variable), position = "identity", alpha = 1, bins=100) +
+  scale_fill_brewer(palette= 'Paired', "sample") +
+  facet_wrap(~variable, strip.position = "top") +
+  theme_classic(base_size = 8)
+dev.off()
+
+
+q.q.norm <- function(x){
+  qqnorm(x)
+  qqline(x, col="red", lty=2)
+  
+}
+par(mfrow=c(4,3))
+apply(pRHSTY.filtered[,5:16],2, q.q.norm)
+```
+
+Perform one-way ANOVA and post-hoc test
+
+```{r}
+anovadata <- pRHSTY.filtered[,intensitycolumns]                                                  # take only intensity columns
+anovadata$protein <- rownames(anovadata)                                                         # assign rownames
+anovadata<-melt(anovadata)                                                                       # melt data in a long list
+anovadata$condition <- gsub("Intensity.([^_]+)_(.*)","\\1", anovadata$variable)                  # assign conditions
+anovadata$replicate <- gsub("Intensity.([^_]+)_(.*)","\\2", anovadata$variable)                  # assign replicates
+anovadata <- split(anovadata, anovadata$protein)                                                 # split anova result for each protein
+
+anovaresults <- sapply(anovadata, FUN=function(x) {anova(aov(value ~ condition, x))$Pr[1]} )     # take the p-value from the result list
+
+pRHSTY.filtered$anova.p <- anovaresults[rownames(pRHSTY.filtered)]                               # add anova.p column to df based on rownames (proteinID)
+pRHSTY.filtered$anova.q <- p.adjust(pRHSTY.filtered$anova.p, method="BH")                       # perform multipel testing correction, BH = Benjamini Hochberg correcting 
+
+# Log transform p- and q-value
+pRHSTY.filtered$anovascore <- -log10(pRHSTY.filtered$anova.p )                                           # anovascore = -log10(p-value)
+pRHSTY.filtered$anovaqscore <- -log10(pRHSTY.filtered$anova.q )                                          # anovaqscore = -log10(q-value)
+
+# Posthoc test - Tukey HSD
+# posthoc p-values are the ones to take for individual groups comparisons
+comparisons <- c()
+
+posthoc <- sapply(anovadata, FUN=function(x) {
+  tukey <- TukeyHSD(aov(value ~ condition, x))
+  
+  pvals <- tukey[[1]][,"p adj"]
+  
+  #This can only work if the first row gives a complete result
+  comparisons <<- union(rownames(tukey$condition), comparisons)
+  complete.pvals <-rep(NA, length(comparisons))
+  names(complete.pvals) <- comparisons
+  
+  complete.pvals[rownames(tukey$condition)] <- pvals
+  
+  complete.pvals[order(names(complete.pvals))]
+} )
+
+posthoc<-t(posthoc)
+
+
+posthoc<-posthoc[rownames(pRHSTY.filtered),]                                                         # order posthoc data on rownames
+
+pRHSTY.filtered <- cbind(pRHSTY.filtered, posthoc)                                                   # combine posthoc results with df
+
+### add column for protein name & gene name
+rownames(uniprotname) <- uniprotname[, "Entry"]
+colnames(uniprotname)[colnames(uniprotname)=="Entry"] <- "Protein"
+
+minimal.df<- uniprotname[, c("Protein", "Protein.names", "Gene.names", "Function..CC.")]
+pRHSTY.filtered<- left_join(pRHSTY.filtered, minimal.df,by=c('Protein'))
+
+
+### add anova sig. column
+pRHSTY.filtered$anovaq.significant <- ifelse((pRHSTY.filtered$anovaqscore >= 1.3), "+", "")
+
+### add column for FC
+
+pRHSTY.filtered$Dif.Stk1.SdrE <- pRHSTY.filtered$Stk1 - pRHSTY.filtered$SdrE
+pRHSTY.filtered$Dif.Stp1.SdrE <- pRHSTY.filtered$Stp1 - pRHSTY.filtered$SdrE
+pRHSTY.filtered$Dif.Stp1.Stk1 <- pRHSTY.filtered$Stp1 - pRHSTY.filtered$Stk1
+
+
+
+#log posthoc p-values
+
+pRHSTY.filtered$pvalue.Stk1.SdrE <- -log10(pRHSTY.filtered$`Stk1-SdrE`)
+pRHSTY.filtered$pvalue.Stp1.SdrE <- -log10(pRHSTY.filtered$`Stp1-SdrE`)
+pRHSTY.filtered$pvalue.Stp1.Stk1 <- -log10(pRHSTY.filtered$`Stp1-Stk1`)
+
+# remove inf values > introduced in comparison with only one value
+pvalcolumns <- grep("pvalue.*", colnames(pRHSTY.filtered))
+
+pRHSTY.filtered[,pvalcolumns] <- apply(pRHSTY.filtered[, pvalcolumns], 2, function(x) { x[is.infinite(x)] <- NA; x})
+
+#extract anova significant proteins
+sig.anova <- pRHSTY.filtered[pRHSTY.filtered$anovaq.significant == "+",]
+
+#determining FC cutoff
+
+FCcolumns <- grep("Dif.*", colnames(pRHSTY.filtered))
+cutoffdata <- pRHSTY.filtered[pRHSTY.filtered$anovaqscore >= 1.3,FCcolumns]                        # taking only protein significant according to anova q value
+
+cutoffdata$protein <- rownames(cutoffdata)  
+cutoffdatam<-melt(cutoffdata) 
+
+qqnorm(cutoffdatam$value)
+qqline(cutoffdatam$value, col="red", lty=2)
+
+#taking mean +- 1*SD as cutoff
+FC.mean <- mean(cutoffdatam$value, na.rm=TRUE)
+FC.sd <- sd(cutoffdatam$value, na.rm = TRUE)
+
+FC.cutoff.up.1SD <- FC.mean+FC.sd
+FC.cutoff.down.1SD <- FC.mean-FC.sd
+
+#Subset Significant hits
+Stk1.Ctrl.1sd <- sig.anova[which(sig.anova$Dif.Stk1.SdrE <= FC.cutoff.down.1SD & sig.anova$pvalue.Stk1.SdrE > 1.3 | 
+                                   sig.anova$Dif.Stk1.SdrE >=FC.cutoff.up.1SD & sig.anova$pvalue.Stk1.SdrE > 1.3),]
+
+Stp1.Ctrl.1sd <- sig.anova[which(sig.anova$Dif.Stp1.SdrE <= FC.cutoff.down.1SD & sig.anova$pvalue.Stp1.SdrE > 1.3 | 
+                                   sig.anova$Dif.Stp1.SdrE >= FC.cutoff.up.1SD & sig.anova$pvalue.Stp1.SdrE > 1.3),]
+Stp1.Stk1.1sd <- sig.anova[which(sig.anova$Dif.Stp1.Stk1 <= FC.cutoff.down.1SD & sig.anova$pvalue.Stp1.Stk1 > 1.3 | 
+                                   sig.anova$Dif.Stp1.Stk1 >= FC.cutoff.up.1SD & sig.anova$pvalue.Stp1.Stk1 > 1.3),]
+
+```
+
+
+Prepare data for volcanoplot and plot it
+
+```{r}
+pRHSTY.filtered$Stk1.SdrE.subset <- NA
+
+pRHSTY.filtered$Stk1.SdrE.subset <- ifelse(pRHSTY.filtered$Dif.Stk1.SdrE <= FC.cutoff.down.1SD & 
+                                pRHSTY.filtered$pvalue.Stk1.SdrE >1.3 &
+                                pRHSTY.filtered$anovaqscore >1.3 ,"down", pRHSTY.filtered$Stk1.SdrE.subset)
+pRHSTY.filtered$Stk1.SdrE.subset <- ifelse(pRHSTY.filtered$Dif.Stk1.SdrE >= FC.cutoff.up.1SD & 
+                                pRHSTY.filtered$pvalue.Stk1.SdrE >1.3 &
+                                pRHSTY.filtered$anovaqscore >1.3 ,"up", pRHSTY.filtered$Stk1.SdrE.subset)
+pRHSTY.filtered$Stk1.SdrE.subset <- ifelse( is.na(pRHSTY.filtered$Stk1.SdrE.subset),"neutral", pRHSTY.filtered$Stk1.SdrE.subset)  
+
+pRHSTY.filtered$Stk1.SdrE.subset2 <- pRHSTY.filtered$Stk1.SdrE.subset
+pRHSTY.filtered$Stk1.SdrE.subset2 <- ifelse(pRHSTY.filtered$Amino.acid== "R", "R", pRHSTY.filtered$Stk1.SdrE.subset2)
+
+
+pRHSTY.filtered$Stp1.SdrE.subset <- NA
+
+pRHSTY.filtered$Stp1.SdrE.subset <- ifelse(pRHSTY.filtered$Dif.Stp1.SdrE <= FC.cutoff.down.1SD & 
+                                             pRHSTY.filtered$pvalue.Stp1.SdrE >1.3 &
+                                             pRHSTY.filtered$anovaqscore >1.3 ,"down", pRHSTY.filtered$Stp1.SdrE.subset)
+pRHSTY.filtered$Stp1.SdrE.subset <- ifelse(pRHSTY.filtered$Dif.Stp1.SdrE >= FC.cutoff.up.1SD & 
+                                             pRHSTY.filtered$pvalue.Stp1.SdrE >1.3 &
+                                             pRHSTY.filtered$anovaqscore >1.3 ,"up", pRHSTY.filtered$Stp1.SdrE.subset)
+pRHSTY.filtered$Stp1.SdrE.subset <- ifelse( is.na(pRHSTY.filtered$Stp1.SdrE.subset),"neutral", pRHSTY.filtered$Stp1.SdrE.subset)  
+
+pRHSTY.filtered$Stp1.SdrE.subset2 <- pRHSTY.filtered$Stp1.SdrE.subset
+pRHSTY.filtered$Stp1.SdrE.subset2 <- ifelse(pRHSTY.filtered$Amino.acid== "R", "R", pRHSTY.filtered$Stp1.SdrE.subset2)
+
+
+
+Stp1.Ctrl.plot.pR.new <-
+  ggplot(pRHSTY.filtered, aes(Dif.Stp1.SdrE, pvalue.Stp1.SdrE))+
+  geom_point( aes(colour = factor(Stp1.SdrE.subset2)))+
+  scale_color_manual(values=c("#c51b7d","#000000","#A45BBA", "#5AB4AD"))+
+  xlim(-10,10)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line.x =  element_line(colour = "black"),
+        panel.border = element_rect(colour = "black", fill=NA),
+        axis.line.y = element_line(colour = "black"), legend.title = element_blank(), legend.position = "none")+
+  geom_hline(yintercept=1.3)+
+  geom_vline(xintercept = FC.cutoff.down.1SD)+
+  geom_vline(xintercept = FC.cutoff.up.1SD)+
+  xlab("log2(FC Stp1 mutant / Ctrl)")+
+  ylab("-log10(adjusted p-value)")
+
+Stk1.Ctrl.plot.pR.new <-
+  ggplot(pRHSTY.filtered, aes(Dif.Stk1.SdrE, pvalue.Stk1.SdrE))+
+  geom_point( aes(colour = factor(Stk1.SdrE.subset2)))+
+  scale_color_manual(values=c("#c51b7d","#000000","#A45BBA", "#5AB4AD"))+
+  xlim(-10,10)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line.x =  element_line(colour = "black"),
+        panel.border = element_rect(colour = "black", fill=NA),
+        axis.line.y = element_line(colour = "black"), legend.title = element_blank(), legend.position = "none")+
+  geom_hline(yintercept=1.3)+
+  geom_vline(xintercept = FC.cutoff.down.1SD)+
+  geom_vline(xintercept = FC.cutoff.up.1SD)+
+  xlab("log2(FC Stk1 mutant / Ctrl)")+
+  ylab("-log10(adjusted p-value)")
+
+```
+
+Create pie-chart for over- and under-represented p-sites:
+
+```{r}
+pRHSTY.filtered.Stp1.Ctrl.regulation<- data.frame(
+  category=c("neutral", "down", "up"),
+  count=c(nrow(pRHSTY.filtered[pRHSTY.filtered$Stp1.SdrE.subset == "neutral",]), 
+          nrow(pRHSTY.filtered[pRHSTY.filtered$Stp1.SdrE.subset == "down",]),
+          nrow(pRHSTY.filtered[pRHSTY.filtered$Stp1.SdrE.subset == "up",]))
+)
+
+pRHSTY.filtered.Stk1.Ctrl.regulation<- data.frame(
+  category=c("neutral", "down", "up"),
+  count=c(nrow(pRHSTY.filtered[pRHSTY.filtered$Stk1.SdrE.subset == "neutral",]), 
+          nrow(pRHSTY.filtered[pRHSTY.filtered$Stk1.SdrE.subset == "down",]),
+          nrow(pRHSTY.filtered[pRHSTY.filtered$Stk1.SdrE.subset == "up",]))
+)
+
+pRHSTY.filtered.Stp1.Ctrl.regulation$fraction <- pRHSTY.filtered.Stp1.Ctrl.regulation$count / sum(pRHSTY.filtered.Stp1.Ctrl.regulation$count)
+
+pRHSTY.filtered.Stk1.Ctrl.regulation$fraction <- pRHSTY.filtered.Stk1.Ctrl.regulation$count / sum(pRHSTY.filtered.Stk1.Ctrl.regulation$count)
+
+#set leves on category
+pRHSTY.filtered.Stp1.Ctrl.regulation$category.ordered <- factor(pRHSTY.filtered.Stp1.Ctrl.regulation$category, levels = pRHSTY.filtered.Stp1.Ctrl.regulation$category)
+
+pRHSTY.filtered.Stk1.Ctrl.regulation$category.ordered <- factor(pRHSTY.filtered.Stk1.Ctrl.regulation$category, levels = pRHSTY.filtered.Stk1.Ctrl.regulation$category)
+
+
+# Calculate the cumulative percentages (top of each rectangle)
+pRHSTY.filtered.Stp1.Ctrl.regulation$ymax <- cumsum(pRHSTY.filtered.Stp1.Ctrl.regulation$fraction)
+
+pRHSTY.filtered.Stk1.Ctrl.regulation$ymax <- cumsum(pRHSTY.filtered.Stk1.Ctrl.regulation$fraction)
+
+
+# Compute the bottom of each rectangle
+pRHSTY.filtered.Stp1.Ctrl.regulation$ymin <- c(0, head(pRHSTY.filtered.Stp1.Ctrl.regulation$ymax, n=-1))
+
+pRHSTY.filtered.Stk1.Ctrl.regulation$ymin <- c(0, head(pRHSTY.filtered.Stk1.Ctrl.regulation$ymax, n=-1))
+
+# Compute label position
+pRHSTY.filtered.Stp1.Ctrl.regulation$labelPosition <- (pRHSTY.filtered.Stp1.Ctrl.regulation$ymax + pRHSTY.filtered.Stp1.Ctrl.regulation$ymin) / 2
+
+pRHSTY.filtered.Stk1.Ctrl.regulation$labelPosition <- (pRHSTY.filtered.Stk1.Ctrl.regulation$ymax + pRHSTY.filtered.Stk1.Ctrl.regulation$ymin) / 2
+
+#compute column with % wih 1 decimal place
+pRHSTY.filtered.Stp1.Ctrl.regulation$pc <- round(pRHSTY.filtered.Stp1.Ctrl.regulation$fraction*100, digits = 1)
+
+pRHSTY.filtered.Stk1.Ctrl.regulation$pc <- round(pRHSTY.filtered.Stk1.Ctrl.regulation$fraction*100, digits = 1)
+
+#Compute a good label
+pRHSTY.filtered.Stp1.Ctrl.regulation$label <- paste0(pRHSTY.filtered.Stp1.Ctrl.regulation$category, "\n ", pRHSTY.filtered.Stp1.Ctrl.regulation$count,
+                                                     "\n ", pRHSTY.filtered.Stp1.Ctrl.regulation$pc, "%")
+
+pRHSTY.filtered.Stk1.Ctrl.regulation$label <- paste0(pRHSTY.filtered.Stk1.Ctrl.regulation$category, "\n ", pRHSTY.filtered.Stk1.Ctrl.regulation$count,
+                                        "\n ", pRHSTY.filtered.Stk1.Ctrl.regulation$pc, "%")
+psite.change.Stp1.Ctrl <-
+  ggplot(pRHSTY.filtered.Stp1.Ctrl.regulation, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category.ordered)) +
+  geom_rect() +
+  geom_text(x=1, aes(y=labelPosition, label=label), size=3, ) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#000000","#c51b7d", "#5AB4AD")) +
+  coord_polar(theta="y", start = 0.375)+
+  theme_void()+
+  theme(legend.position = "none", plot.title =  element_text(hjust = 0.5))+
+  ggtitle("Phosphorylation changes \n 2800")
+
+
+psite.change.Stk1.Ctrl <-
+  ggplot(pRHSTY.filtered.Stk1.Ctrl.regulation, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category.ordered)) +
+  geom_rect() +
+  geom_text(x=1, aes(y=labelPosition, label=label), size=3, ) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#000000","#c51b7d", "#5AB4AD")) +
+  coord_polar(theta="y", start = 0.155)+
+  theme_void()+
+  theme(legend.position = "none", plot.title =  element_text(hjust = 0.5))+
+  ggtitle("Phosphorylation changes \n 2800")
+```
+
+Combine graphs
+
+```{r}
+ggarrange(ggarrange(SdrE.dis, Stk1.dis, Stp1.dis, labels = c("a)", "b)", "c)"), ncol = 3),
+  ggarrange(psite.change.Stp1.Ctrl, psite.change.Stk1.Ctrl, labels = c("d)", "e)"), ncol = 2),
+          ggarrange(Stp1.Ctrl.plot.pR.new, Stk1.Ctrl.plot.pR.new, ncol = 2),
+          nrow = 3, heights = c(1,0.75,2))
+
+```
+
+
+
+

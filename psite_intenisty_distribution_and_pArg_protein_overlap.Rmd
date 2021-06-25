@@ -1,0 +1,435 @@
+---
+title: "psite intensity distributon and pArg protein overlap"
+author: "Nadine Prust"
+date: "4/20/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Phosphosites intensity distribution
+
+All necessary data is deposited on Pride and can be downloaded. The used files for this script can be found in the MQ_output_txt.zip file. Add the MQ_output_txt folder then to your project folder to access the required data. 
+
+```{r}
+#load libraries
+
+library(plyr)
+library(dplyr)
+library(VennDiagram)
+library(ggplot2)
+library(ggpubr)
+```
+
+Read "Phospho (RHSTY)Sites.txt" from individual MaxQuant (Version	1.6.3.4) searches
+
+```{r}
+Stk1.pRHSTY <- read.delim("MQ_output_txt/Endogenous_data/Stk1/txt/Phospho (RHSTY)Sites_Stk1.txt", header = TRUE,
+                          stringsAsFactors = FALSE, dec = ".")
+Stp1.pRHSTY <- read.delim("MQ_output_txt/Endogenous_data/Stp1/txt/Phospho (RHSTY)Sites_Stp1.txt", header = TRUE,
+                          stringsAsFactors = FALSE, dec = ".")
+SdrE.pRHSTY <- read.delim("MQ_output_txt/Endogenous_data/SdrE/txt/Phospho (RHSTY)Sites_SdrE.txt", header = TRUE,
+                          stringsAsFactors = FALSE, dec = ".")
+```
+
+Filter for contaminants and reversed entries
+
+```{r}
+Stk1.pRHSTY.filtered <- Stk1.pRHSTY[Stk1.pRHSTY$Potential.contaminant != "+",]
+Stk1.pRHSTY.filtered <- Stk1.pRHSTY.filtered[Stk1.pRHSTY.filtered$Reverse != "+",]
+
+Stp1.pRHSTY.filtered <- Stp1.pRHSTY[Stp1.pRHSTY$Potential.contaminant != "+",]
+Stp1.pRHSTY.filtered <- Stp1.pRHSTY.filtered[Stp1.pRHSTY.filtered$Reverse != "+",]
+
+SdrE.pRHSTY.filtered <- SdrE.pRHSTY[SdrE.pRHSTY$Potential.contaminant != "+",]
+SdrE.pRHSTY.filtered <- SdrE.pRHSTY.filtered[SdrE.pRHSTY.filtered$Reverse != "+",]
+```
+
+Select necessary columns
+
+```{r}
+Stk1.pRHSTY.filtered <- Stk1.pRHSTY.filtered[, c("Protein","Amino.acid", "Positions.within.proteins", "Number.of.Phospho..RHSTY.", "Phospho..RHSTY..Probabilities",
+                                                 "Intensity.Stk1_1", "Intensity.Stk1_2", "Intensity.Stk1_3", "Intensity.Stk1_4", "Delta.score", "Score",
+                                                 "Localization.prob", "Sequence.window",
+                                                 "Reverse", "Potential.contaminant",
+                                                 "Localization.prob.Stk1_1", "Localization.prob.Stk1_2", "Localization.prob.Stk1_3", "Localization.prob.Stk1_4",
+                                                 "Best.localization.evidence.ID", "Best.localization.raw.file", "Best.localization.scan.number"
+                                                 
+)]
+
+Stp1.pRHSTY.filtered <- Stp1.pRHSTY.filtered[, c("Protein","Amino.acid", "Positions.within.proteins", "Number.of.Phospho..RHSTY.", "Phospho..RHSTY..Probabilities",
+                                                 "Intensity.Stp1_1", "Intensity.Stp1_2", "Intensity.Stp1_3", "Intensity.Stp1_4", "Delta.score", "Score",
+                                                 "Localization.prob", "Sequence.window",
+                                                 "Reverse", "Potential.contaminant",
+                                                 "Localization.prob.Stp1_1", "Localization.prob.Stp1_2", "Localization.prob.Stp1_3", "Localization.prob.Stp1_4",
+                                                 "Best.localization.evidence.ID", "Best.localization.raw.file", "Best.localization.scan.number"
+                                                 
+)]
+
+SdrE.pRHSTY.filtered <- SdrE.pRHSTY.filtered[, c("Protein","Amino.acid", "Positions.within.proteins", "Number.of.Phospho..RHSTY.", "Phospho..RHSTY..Probabilities",
+                                                 "Intensity.SdrE_1", "Intensity.SdrE_2", "Intensity.SdrE_3", "Intensity.SdrE_4", "Delta.score", "Score",
+                                                 "Localization.prob", "Sequence.window",
+                                                 "Reverse", "Potential.contaminant",
+                                                 "Localization.prob.SdrE_1", "Localization.prob.SdrE_2", "Localization.prob.SdrE_3", "Localization.prob.SdrE_4",
+                                                 "Best.localization.evidence.ID", "Best.localization.raw.file", "Best.localization.scan.number"
+                                                 
+)]
+
+```
+
+Log2 transform data, perform median normalization: calculate median per sample (on column) and substract it from each row and filter for 2 valid values 
+
+```{r}
+#assign intensity columns
+intensitycolumns.Stk1 <- grep("Intensity.", colnames(Stk1.pRHSTY.filtered))
+intensitycolumns.Stp1 <- grep("Intensity.", colnames(Stp1.pRHSTY.filtered))
+intensitycolumns.SdrE <- grep("Intensity.", colnames(SdrE.pRHSTY.filtered))
+
+# apply log transformation on all intensity columns
+Stk1.pRHSTY.filtered[,intensitycolumns.Stk1] <- apply(Stk1.pRHSTY.filtered[,intensitycolumns.Stk1], 2, FUN=log2 )
+Stp1.pRHSTY.filtered[,intensitycolumns.Stp1] <- apply(Stp1.pRHSTY.filtered[,intensitycolumns.Stp1], 2, FUN=log2 )
+SdrE.pRHSTY.filtered[,intensitycolumns.SdrE] <- apply(SdrE.pRHSTY.filtered[,intensitycolumns.SdrE], 2, FUN=log2 )
+
+#change inf values to NA
+Stk1.pRHSTY.filtered[,intensitycolumns.Stk1] <- apply(Stk1.pRHSTY.filtered[, intensitycolumns.Stk1], 2, function(x) { x[is.infinite(x)] <- NA; x})  
+Stp1.pRHSTY.filtered[,intensitycolumns.Stp1] <- apply(Stp1.pRHSTY.filtered[, intensitycolumns.Stp1], 2, function(x) { x[is.infinite(x)] <- NA; x})  
+SdrE.pRHSTY.filtered[,intensitycolumns.SdrE] <- apply(SdrE.pRHSTY.filtered[, intensitycolumns.SdrE], 2, function(x) { x[is.infinite(x)] <- NA; x})  
+
+# median normalization - calculate median per sample (on column) and substract it from each row
+
+Stk1.pRHSTY.filtered[,intensitycolumns.Stk1] <- apply(Stk1.pRHSTY.filtered[, intensitycolumns.Stk1], 2, function(x) {x- median(x, na.rm = TRUE)}) 
+Stp1.pRHSTY.filtered[,intensitycolumns.Stp1] <- apply(Stp1.pRHSTY.filtered[, intensitycolumns.Stp1], 2, function(x) {x- median(x, na.rm = TRUE)}) 
+SdrE.pRHSTY.filtered[,intensitycolumns.SdrE] <- apply(SdrE.pRHSTY.filtered[, intensitycolumns.SdrE], 2, function(x) {x- median(x, na.rm = TRUE)}) 
+
+
+# calculate avg
+
+Stk1.pRHSTY.filtered$Stk1 <- rowMeans(Stk1.pRHSTY.filtered[,intensitycolumns.Stk1], na.rm = TRUE)
+Stp1.pRHSTY.filtered$Stp1 <- rowMeans(Stp1.pRHSTY.filtered[,intensitycolumns.Stp1], na.rm = TRUE)
+SdrE.pRHSTY.filtered$SdrE <- rowMeans(SdrE.pRHSTY.filtered[,intensitycolumns.SdrE], na.rm = TRUE)
+
+#count NA per replicate
+
+Stk1.pRHSTY.filtered$NA_Stk1 <- apply(Stk1.pRHSTY.filtered[,intensitycolumns.Stk1],1,function(x) sum(is.na(x)))
+Stp1.pRHSTY.filtered$NA_Stp1 <- apply(Stp1.pRHSTY.filtered[,intensitycolumns.Stp1],1,function(x) sum(is.na(x)))
+SdrE.pRHSTY.filtered$NA_SdrE <- apply(SdrE.pRHSTY.filtered[,intensitycolumns.SdrE],1,function(x) sum(is.na(x)))
+
+
+
+# filter for identification 2x in at least one group 
+Stk1.pRHSTY.filtered <- Stk1.pRHSTY.filtered[(Stk1.pRHSTY.filtered$NA_Stk1 <=2),]
+Stp1.pRHSTY.filtered <- Stp1.pRHSTY.filtered[(Stp1.pRHSTY.filtered$NA_Stp1 <=2),]
+SdrE.pRHSTY.filtered <- SdrE.pRHSTY.filtered[(SdrE.pRHSTY.filtered$NA_SdrE <=2),]
+
+```
+
+Filter for class I phosphosites
+
+```{r}
+Stk1.pRHSTY.filtered.classI <- Stk1.pRHSTY.filtered[Stk1.pRHSTY.filtered$Localization.prob >= 0.75,]
+Stp1.pRHSTY.filtered.classI <- Stp1.pRHSTY.filtered[Stp1.pRHSTY.filtered$Localization.prob >= 0.75,]
+SdrE.pRHSTY.filtered.classI <- SdrE.pRHSTY.filtered[SdrE.pRHSTY.filtered$Localization.prob >= 0.75,]
+```
+
+Plot intensity distribution forpPser, pThr, pTyr, pHis and pArg for all three mutants
+
+```{r}
+Stk1.abundance.plot <-
+  Stk1.pRHSTY.filtered %>%
+  mutate(Amino.acid = factor(Amino.acid, levels = c("S", "T", "Y", "H" ,"R"))) %>%
+  ggplot(aes(x=Amino.acid, y=Stk1, fill=Amino.acid)) +
+  geom_violin(color="black", show.legend = FALSE)+
+  scale_fill_manual(values = c("S"=  "#b3cde3","T"= "#8c96c6","Y"=  "#8856a7" ,"H"= "#810f7c", "R"= "#210320")) +
+  geom_boxplot(width=0.1, show.legend = FALSE)+
+  stat_summary(fun=mean, geom="point", shape=23, size=3, show.legend = FALSE)+
+  theme(axis.title.x = element_blank(), panel.background =  element_blank(), axis.line = element_line())+
+  ylab("Log2 normalized intensity")+
+  ggtitle("Stk1 mutant")
+
+Stp1.abundance.plot <-
+  Stp1.pRHSTY.filtered %>%
+  mutate(Amino.acid = factor(Amino.acid, levels = c("S", "T", "Y", "H" ,"R"))) %>%
+  ggplot(aes(x=Amino.acid, y=Stp1, fill=Amino.acid)) +
+  geom_violin(color="black", show.legend = FALSE)+
+  scale_fill_manual(values = c("S"=  "#b3cde3","T"= "#8c96c6","Y"=  "#8856a7" ,"H"= "#810f7c", "R"= "#210320")) +
+  geom_boxplot(width=0.1, show.legend = FALSE)+
+  stat_summary(fun=mean, geom="point", shape=23, size=3, show.legend = FALSE)+
+  theme(axis.title.x = element_blank(), panel.background =  element_blank(), axis.line = element_line())+
+  ylab("Log2 normalized intensity")+
+  ggtitle("Stp1 mutant")
+
+SdrE.abundance.plot <-
+  SdrE.pRHSTY.filtered %>%
+  mutate(Amino.acid = factor(Amino.acid, levels = c("S", "T", "Y", "H" ,"R"))) %>%
+  ggplot(aes(x=Amino.acid, y=SdrE, fill=Amino.acid)) +
+  geom_violin(color="black", show.legend = FALSE)+
+  scale_fill_manual(values = c("S"=  "#b3cde3","T"= "#8c96c6","Y"=  "#8856a7" ,"H"= "#810f7c", "R"= "#210320")) +
+  geom_boxplot(width=0.1, show.legend = FALSE)+
+  stat_summary(fun=mean, geom="point", shape=23, size=3, show.legend = FALSE)+
+  theme(axis.title.x = element_blank(), panel.background =  element_blank(), axis.line = element_line())+
+  ylab("Log2 normalized intensity")+
+  ggtitle("Control")
+```
+
+## Phosphoprotein overlap
+
+Determine all phosphorylation positions per protein
+
+```{r}
+#Extract positions of phosphoryltaion
+
+AA_position_extraction <- function(df){
+  
+  a <- df[,c("Protein", "Amino.acid","Positions.within.proteins")]
+  a$Positions <- paste(a$Amino.acid, gsub(";.*", "", df$Positions.within.proteins))
+  a <- ddply(a, .(Protein), summarize,
+             Position=paste(Positions,collapse=";"))
+}
+
+Stk1.positions <- AA_position_extraction(Stk1.pRHSTY.filtered.classI)
+
+Stp1.positions <- AA_position_extraction(Stp1.pRHSTY.filtered.classI)
+
+SdrE.positions <- AA_position_extraction(SdrE.pRHSTY.filtered.classI)
+```
+
+Extract proteins with class I phosphosites
+
+```{r}
+Stk1.classI.identifier <- Stk1.pRHSTY.filtered.classI[which(!duplicated(Stk1.pRHSTY.filtered.classI$Protein)), "Protein"]
+
+Stp1.classI.identifier <- Stp1.pRHSTY.filtered.classI[which(!duplicated(Stp1.pRHSTY.filtered.classI$Protein)), "Protein"]
+
+SdrE.classI.identifier <- SdrE.pRHSTY.filtered.classI[which(!duplicated(SdrE.pRHSTY.filtered.classI$Protein)), "Protein"]
+```
+
+Extract proteins phosphorylated on Ser, Thr, Tyr, His and Arg
+
+```{r}
+AA_split <- function(df){
+  
+  pSer <- df[df$Amino.acid == "S",]
+  pSer.identified <- pSer[which(!duplicated(pSer$Protein)), "Protein"]
+  pSer.classI <- pSer[pSer$Localization.prob >= 0.75,]
+  pSer.identified.classI <- pSer.classI[which(!duplicated(pSer.classI$Protein)), "Protein"]
+  
+  pThr <- df[df$Amino.acid == "T",]
+  pThr.identified <- pThr[which(!duplicated(pThr$Protein)), "Protein"]
+  pThr.classI <- pThr[pThr$Localization.prob >= 0.75,]
+  pThr.identified.classI <- pThr.classI[which(!duplicated(pThr.classI$Protein)), "Protein"]
+  
+  pTyr <- df[df$Amino.acid == "Y",]
+  pTyr.identified <- pTyr[which(!duplicated(pTyr$Protein)), "Protein"]
+  pTyr.classI <- pTyr[pTyr$Localization.prob >= 0.75,]
+  pTyr.identified.classI <- pTyr.classI[which(!duplicated(pTyr.classI$Protein)), "Protein"]
+  
+  pHis <- df[df$Amino.acid == "H",]
+  pHis.identified <- pHis[which(!duplicated(pHis$Protein)), "Protein"]
+  pHis.classI <- pHis[pHis$Localization.prob >= 0.75,]
+  pHis.identified.classI <- pHis.classI[which(!duplicated(pHis.classI$Protein)), "Protein"]
+  
+  pArg <- df[df$Amino.acid == "R",]
+  pArg.identified <- pArg[which(!duplicated(pArg$Protein)), "Protein"]
+  pArg.classI <- pArg[pArg$Localization.prob >= 0.75,]
+  pArg.identified.classI <- pArg.classI[which(!duplicated(pArg.classI$Protein)), "Protein"]
+  
+  output <- list("pSer" = pSer, "pSer.identified" = pSer.identified, "pSer.classI"= pSer.classI, "pSer.identified.classI"=  pSer.identified.classI,
+                 "pThr" =  pThr, "pThr.identified" = pThr.identified, "pThr.classI"= pThr.classI, "pThr.identified.classI" = pThr.identified.classI,
+                 "pTyr" =  pTyr, "pTyr.identified" = pTyr.identified, "pTyr.classI"= pTyr.classI, "pTyr.identified.classI" = pTyr.identified.classI,
+                 "pHis" = pHis, "pHis.identified" = pHis.identified, "pHis.classI"= pHis.classI, "pHis.identified.classI" = pHis.identified.classI,
+                 "pArg" = pArg, "pArg.identified" =  pArg.identified, "pArg.classI"=  pArg.classI, "pArg.identified.classI"= pArg.identified.classI)
+  
+  return(output)
+}
+
+
+Stk1.aa.split <- AA_split(Stk1.pRHSTY.filtered)
+
+
+Stk1.pSer <- Stk1.aa.split$pSer
+Stk1.pSer.identified <- Stk1.aa.split$pSer.identified
+Stk1.pSer.classI <- Stk1.aa.split$pSer.classI
+Stk1.pSer.identified.classI <- Stk1.aa.split$pSer.identified.classI
+
+Stk1.pThr <- Stk1.aa.split$pThr
+Stk1.pThr.identified <- Stk1.aa.split$pThr.identified
+Stk1.pThr.classI <- Stk1.aa.split$pThr.classI
+Stk1.pThr.identified.classI <- Stk1.aa.split$pThr.identified.classI
+
+Stk1.pTyr <- Stk1.aa.split$pTyr
+Stk1.pTyr.identified <- Stk1.aa.split$pTyr.identified
+Stk1.pTyr.classI <- Stk1.aa.split$pTyr.classI
+Stk1.pTyr.identified.classI <- Stk1.aa.split$pTyr.identified.classI
+
+Stk1.pHis <- Stk1.aa.split$pHis
+Stk1.pHis.identified <- Stk1.aa.split$pHis.identified
+Stk1.pHis.classI <- Stk1.aa.split$pHis.classI
+Stk1.pHis.identified.classI <- Stk1.aa.split$pHis.identified.classI
+
+Stk1.pArg <- Stk1.aa.split$pArg
+Stk1.pArg.identified <- Stk1.aa.split$pArg.identified
+Stk1.pArg.classI <- Stk1.aa.split$pArg.classI
+Stk1.pArg.identified.classI <- Stk1.aa.split$pArg.identified.classI
+
+Stp1.aa.split <- AA_split(Stp1.pRHSTY.filtered)
+
+
+Stp1.pSer <- Stp1.aa.split$pSer
+Stp1.pSer.identified <- Stp1.aa.split$pSer.identified
+Stp1.pSer.classI <- Stp1.aa.split$pSer.classI
+Stp1.pSer.identified.classI <- Stp1.aa.split$pSer.identified.classI
+
+Stp1.pThr <- Stp1.aa.split$pThr
+Stp1.pThr.identified <- Stp1.aa.split$pThr.identified
+Stp1.pThr.classI <- Stp1.aa.split$pThr.classI
+Stp1.pThr.identified.classI <- Stp1.aa.split$pThr.identified.classI
+
+Stp1.pTyr <- Stp1.aa.split$pTyr
+Stp1.pTyr.identified <- Stp1.aa.split$pTyr.identified
+Stp1.pTyr.classI <- Stp1.aa.split$pTyr.classI
+Stp1.pTyr.identified.classI <- Stp1.aa.split$pTyr.identified.classI
+
+Stp1.pHis <- Stp1.aa.split$pHis
+Stp1.pHis.identified <- Stp1.aa.split$pHis.identified
+Stp1.pHis.classI <- Stp1.aa.split$pHis.classI
+Stp1.pHis.identified.classI <- Stp1.aa.split$pHis.identified.classI
+
+Stp1.pArg <- Stp1.aa.split$pArg
+Stp1.pArg.identified <- Stp1.aa.split$pArg.identified
+Stp1.pArg.classI <- Stp1.aa.split$pArg.classI
+Stp1.pArg.identified.classI <- Stp1.aa.split$pArg.identified.classI
+
+
+SdrE.aa.split <- AA_split(SdrE.pRHSTY.filtered)
+
+
+SdrE.pSer <- SdrE.aa.split$pSer
+SdrE.pSer.identified <- SdrE.aa.split$pSer.identified
+SdrE.pSer.classI <- SdrE.aa.split$pSer.classI
+SdrE.pSer.identified.classI <- SdrE.aa.split$pSer.identified.classI
+
+SdrE.pThr <- SdrE.aa.split$pThr
+SdrE.pThr.identified <- SdrE.aa.split$pThr.identified
+SdrE.pThr.classI <- SdrE.aa.split$pThr.classI
+SdrE.pThr.identified.classI <- SdrE.aa.split$pThr.identified.classI
+
+SdrE.pTyr <- SdrE.aa.split$pTyr
+SdrE.pTyr.identified <- SdrE.aa.split$pTyr.identified
+SdrE.pTyr.classI <- SdrE.aa.split$pTyr.classI
+SdrE.pTyr.identified.classI <- SdrE.aa.split$pTyr.identified.classI
+
+SdrE.pHis <- SdrE.aa.split$pHis
+SdrE.pHis.identified <- SdrE.aa.split$pHis.identified
+SdrE.pHis.classI <- SdrE.aa.split$pHis.classI
+SdrE.pHis.identified.classI <- SdrE.aa.split$pHis.identified.classI
+
+SdrE.pArg <- SdrE.aa.split$pArg
+SdrE.pArg.identified <- SdrE.aa.split$pArg.identified
+SdrE.pArg.classI <- SdrE.aa.split$pArg.classI
+SdrE.pArg.identified.classI <- SdrE.aa.split$pArg.identified.classI
+
+```
+
+Calculate overlap pf protein phosphoryalted on the different amino acids
+
+```{r}
+venn.data.Stp1 <- list(
+  
+  Ser = Stp1.pSer.identified,
+  Thr = Stp1.pThr.identified,
+  Tyr = Stp1.pTyr.identified,
+  His = Stp1.pHis.identified,
+  Arg = Stp1.pArg.identified
+)
+
+venn.data.Stp1.classI <- list(
+  
+  Ser = Stp1.pSer.identified.classI,
+  Thr = Stp1.pThr.identified.classI,
+  Tyr = Stp1.pTyr.identified.classI,
+  His = Stp1.pHis.identified.classI,
+  Arg = Stp1.pArg.identified.classI
+)
+
+venn.data.Stk1 <- list(
+  
+  Ser = Stk1.pSer.identified,
+  Thr = Stk1.pThr.identified,
+  Tyr = Stk1.pTyr.identified,
+  His = Stk1.pHis.identified,
+  Arg = Stk1.pArg.identified
+)
+venn.data.Stk1.classI <- list(
+  
+  Ser = Stk1.pSer.identified.classI,
+  Thr = Stk1.pThr.identified.classI,
+  Tyr = Stk1.pTyr.identified.classI,
+  His = Stk1.pHis.identified.classI,
+  Arg = Stk1.pArg.identified.classI
+)
+
+venn.data.SdrE <- list(
+  
+  Ser = SdrE.pSer.identified,
+  Thr = SdrE.pThr.identified,
+  Tyr = SdrE.pTyr.identified,
+  His = SdrE.pHis.identified,
+  Arg = SdrE.pArg.identified
+)
+
+venn.data.SdrE.classI <- list(
+  
+  Ser = SdrE.pSer.identified.classI,
+  Thr = SdrE.pThr.identified.classI,
+  Tyr = SdrE.pTyr.identified.classI,
+  His = SdrE.pHis.identified.classI,
+  Arg = SdrE.pArg.identified.classI
+)
+
+
+names.ven <-  c( "pSer", "pThr", "pTyr", "pHis", "pArg")
+
+
+
+
+#generate Venn diagram
+Stk1.Venn <- venn.diagram(
+  venn.data.Stk1 ,
+  category.names = names.ven,
+  filename = NULL,
+  output=TRUE, 
+  col=c("Ser"=  "#b3cde3","Thr"= "#8c96c6","Tyr"=  "#8856a7" ,"His"= "#810f7c", "Arg"= "#210320"),
+  fill = c("Ser" = alpha("#b3cde3",0.5), "Thr"= alpha("#8c96c6",0.5), "Tyr"= alpha("#8856a7",0.5), 
+           "His" = alpha("#810f7c", 0.5),"Arg"= alpha("#210320", 0.5) )
+)
+
+Stp1.Venn<- venn.diagram(
+  venn.data.Stp1 ,
+  category.names = names.ven,
+  filename = NULL,
+  output=TRUE, 
+  col=c("Ser"=  "#b3cde3","Thr"= "#8c96c6","Tyr"=  "#8856a7" ,"His"= "#810f7c", "Arg"= "#210320"),
+  fill = c("Ser" = alpha("#b3cde3",0.5), "Thr"= alpha("#8c96c6",0.5), "Tyr"= alpha("#8856a7",0.5), 
+           "His" = alpha("#810f7c", 0.5),"Arg"= alpha("#210320", 0.5) )
+)
+
+SdrE.Venn <- venn.diagram(
+  venn.data.SdrE ,
+  category.names = names.ven,
+  filename = NULL,
+  output=TRUE, 
+  col=c("Ser"=  "#b3cde3","Thr"= "#8c96c6","Tyr"=  "#8856a7" ,"His"= "#810f7c", "Arg"= "#210320"),
+  fill = c("Ser" = alpha("#b3cde3",0.5), "Thr"= alpha("#8c96c6",0.5), "Tyr"= alpha("#8856a7",0.5), 
+           "His" = alpha("#810f7c", 0.5),"Arg"= alpha("#210320", 0.5) )
+)
+```
+
+Generate combined figure with intensity distribution and phosphoprotein overlap
+
+```{r}
+ggarrange(ggarrange(SdrE.abundance.plot, Stk1.abundance.plot, Stp1.abundance.plot, labels = c("a)", "b)", 'c)'), ncol = 3),
+          ggarrange(SdrE.Venn, Stk1.Venn, Stp1.Venn, labels = c("d)", "e)", "f)"), ncol = 3),
+          nrow = 2)
+```

@@ -1,0 +1,131 @@
+---
+title: "Missed cleavages"
+author: "Nadine Prust"
+date: "4/20/2021"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Analysis of missed cleavages of pArg, pHis and pSTY
+
+All necessary data is deposited on Pride and can be downloaded. The used files for this script can be found in the MQ_output_txt.zip file. Add the MQ_output_txt folder then to your project folder to access the required data. 
+
+```{r}
+library(stringr)
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(colorspace)
+
+```
+
+Read "Phospho (RHSTY).txt" from combined search of all three mutants with MaxQuant (v1.6.3.4)
+
+```{r}
+pRHSTY.exp7 <- read.delim("MQ_output_txt/Endogenous_data/LFQ_Saureus/txt/Phospho (RHSTY)Sites_exp7.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+```
+
+Filter for contaminants and reversed
+
+```{r}
+pRHSTY.exp7 <- pRHSTY.exp7[pRHSTY.exp7$Potential.contaminant != "+",]
+pRHSTY.exp7 <- pRHSTY.exp7[pRHSTY.exp7$Reverse != "+",]
+```
+
+Extract sequence from Phospho (RHSTY) probability column
+
+```{r}
+pRHSTY.exp7$Sequence <- gsub("\\(\\d*\\.?\\d*\\)","", pRHSTY.exp7$Phospho..RHSTY..Probabilities)
+```
+
+Count number of K or R in sequence and substract 1 in order to get number of missed cleavages
+
+```{r}
+pRHSTY.exp7$missed.cleavages <- str_count(pRHSTY.exp7$Sequence, "K|R")-1
+```
+
+Split data in three categories: pArg, pHis and pSTY
+
+```{r}
+pArg <- pRHSTY.exp7[pRHSTY.exp7$Amino.acid == "R",]  
+pArg.classI <- pArg[pArg$Localization.prob >= 0.75,]
+pHis <- pRHSTY.exp7[pRHSTY.exp7$Amino.acid == "H",]
+pHis.classI <- pHis[pHis$Localization.prob >= 0.75,]
+pSTY <- pRHSTY.exp7[pRHSTY.exp7$Amino.acid != "R" & pRHSTY.exp7$Amino.acid != "H",]
+pSTY.classI <- pSTY[pSTY$Localization.prob >= 0.75,]
+```
+
+Calulcate occurence of 0,1,2 or 3 missed cleavages for pArg, pHis and pSTY
+
+```{r}
+#pArg
+missed.cleavages.pArg <- rbind.data.frame( table(pArg$missed.cleavages==0),
+                                           table(pArg$missed.cleavages == 1),
+                                           table(pArg$missed.cleavages== 2), 
+                                           table(pArg$missed.cleavages== 3))
+#set to 0 if if it doesn't occure
+missed.cleavages.pArg <- ifelse(missed.cleavages.pArg[[1]] == missed.cleavages.pArg[[2]],
+                                                  0, missed.cleavages.pArg[[2]])
+missed.cleavages.pArg <- cbind.data.frame(c(0,1,2,3),missed.cleavages.pArg)
+
+colnames(missed.cleavages.pArg) <- c("Missed.cleavges", "Frequency")
+#calculate percantage of the different missed cleavages
+missed.cleavages.pArg$pc <- missed.cleavages.pArg$Frequency/sum(missed.cleavages.pArg$Frequency)*100
+
+missed.cleavages.pArg$aa <- "R"
+
+#pHis
+missed.cleavages.pHis <- rbind.data.frame( table(pHis$missed.cleavages==0),
+                                           table(pHis$missed.cleavages == 1),
+                                           table(pHis$missed.cleavages== 2),
+                                           table(pHis$missed.cleavages== 3))
+missed.cleavages.pHis <- ifelse(missed.cleavages.pHis[[1]] == missed.cleavages.pHis[[2]],
+                                0, missed.cleavages.pHis[[2]])
+missed.cleavages.pHis <- cbind.data.frame(c(0,1,2,3),missed.cleavages.pHis)
+
+colnames(missed.cleavages.pHis) <- c("Missed.cleavges", "Frequency")
+
+missed.cleavages.pHis$pc <- missed.cleavages.pHis$Frequency/sum(missed.cleavages.pHis$Frequency)*100
+
+missed.cleavages.pHis$aa <- "H"
+
+#pSTY
+
+missed.cleavages.pSTY <- rbind.data.frame( table(pSTY$missed.cleavages==0),
+                                           table(pSTY$missed.cleavages == 1),
+                                           table(pSTY$missed.cleavages== 2),
+                                           table(pSTY$missed.cleavages== 3))
+missed.cleavages.pSTY <- ifelse(missed.cleavages.pSTY[[1]] == missed.cleavages.pSTY[[2]],
+                                0, missed.cleavages.pSTY[[2]])
+missed.cleavages.pSTY <- cbind.data.frame(c(0,1,2,3),missed.cleavages.pSTY)
+
+colnames(missed.cleavages.pSTY) <- c("Missed.cleavges", "Frequency")
+
+missed.cleavages.pSTY$pc <- missed.cleavages.pSTY$Frequency/sum(missed.cleavages.pSTY$Frequency)*100
+
+missed.cleavages.pSTY$aa <- "STY"
+
+#combine all information in one table
+missed.cleavages.overview <- rbind.data.frame(missed.cleavages.pArg, missed.cleavages.pHis, missed.cleavages.pSTY)
+missed.cleavages.overview$Missed.cleavges <- as.character(missed.cleavages.overview$Missed.cleavges)
+```
+
+Plot distribution of missed cleavages for pHis, pArgg and pSTY
+
+```{r}
+pal <- rev(heat_hcl(4,h=c(0,-100), l=c(75,40), c=c(40,80), power=1))
+missed.cleavages.overview %>%
+  mutate(Missed.cleavges = fct_relevel(Missed.cleavges, "3","2","1", "0" ))%>%
+  ggplot(aes(x=aa, y=pc, fill=Missed.cleavges))+
+  geom_bar(stat = "identity")+
+  scale_fill_manual(values = pal)+
+  theme_classic()+
+  ylab("Number of peptides [%]")+
+  xlab("Number of missed cleavages")
+
+```

@@ -1,0 +1,643 @@
+---
+title: "pArg stability analysis"
+author: "Nadine Prust"
+date: "4/19/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Stability analysis of arginine phosphorylation
+
+All necessary data is deposited on Pride and can be downloaded. The used files for this script can be found in the MQ_output_txt.zip file. Add the MQ_output_txt folder then to your project folder to access the required data. 
+
+```{r}
+library(ggpubr)
+library(ggplot2)
+library(ggforce)
+library(dplyr)
+library(tidyverse)
+library(RColorBrewer)
+library(reshape2)
+```
+
+## Stability at pH2, 4C
+
+Read "evidence.txt" and "msms.txt" from MaxQuant v1.6.17.0 from time series
+
+```{r}
+Stability.test.evidence <- read.delim("MQ_output_txt/Synthetic_peptides/Stability_4C/txt/evidence.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+Stability.test.msms <- read.delim("MQ_output_txt/Synthetic_peptides/Stability_4C/txtStability_test/msms.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+
+```
+
+Filter for contaminants
+
+``` {r}
+Stability.test.evidence <- Stability.test.evidence[Stability.test.evidence$Potential.contaminant != "+",]
+
+```
+
+Log2 transform the intensity
+```{r}
+Stability.test.evidence$log2Intensity <- log2(Stability.test.evidence$Intensity)
+```
+Change column name so that it is the same in msms and evidence: Best.MS.MS corresponds to id in msms
+
+```{r}
+colnames(Stability.test.msms)[colnames(Stability.test.msms)=="id"] <- "Best.MS.MS"
+
+```
+
+Filter for "Multi-MSMS" in evidence table
+
+```{r}
+Stability.test.Multi.MSMS <- Stability.test.evidence[Stability.test.evidence$Type == "MULTI-MSMS",]
+```
+
+Split date into time points
+
+```{r}
+timepoint <- split(Stability.test.Multi.MSMS, f= Stability.test.Multi.MSMS$Experiment)
+```
+
+Extract the log2 intensity for the individual time points per replicate and average the intensity per time point
+
+```{r}
+intensity.calc <- function(timelist, point1, point2,point3, point4, timepoint, R1.name, R2.name, R3.name, R4.name){
+  
+  R1 <- as.data.frame(timelist[[point1]]) %>% select(Modified.sequence, Modifications, log2Intensity, Proteins) %>% 
+    group_by(Modified.sequence, Modifications) %>% summarise(R1 = sum(log2Intensity), Timepoint = timepoint, Peptide = Proteins)
+  
+  R1 <- unique(R1)
+  
+  R2 <- as.data.frame(timelist[[point2]]) %>% select(Modified.sequence, Modifications, log2Intensity, Proteins) %>% 
+    group_by(Modified.sequence, Modifications) %>% summarise(R2 = sum(log2Intensity), Timepoint = timepoint, Peptide = Proteins)
+  
+  R2 <- unique(R2)
+  
+  R3 <- as.data.frame(timelist[[point3]]) %>% select(Modified.sequence, Modifications, log2Intensity, Proteins) %>% 
+    group_by(Modified.sequence, Modifications) %>% summarise(R3 = sum(log2Intensity), Timepoint = timepoint, Peptide = Proteins)
+  R3 <- unique(R3)
+  
+  R4 <- as.data.frame(timelist[[point4]]) %>% select(Modified.sequence, Modifications, log2Intensity, Proteins) %>% 
+    group_by(Modified.sequence, Modifications) %>% summarise(R4 = sum(log2Intensity), Timepoint = timepoint, Peptide = Proteins)
+  R4 <- unique(R4)
+  
+  a <- full_join(R1, R2, by="Modified.sequence")
+  a<- full_join(a, R3, by="Modified.sequence")
+  a <- full_join(a, R4, by="Modified.sequence")
+  
+  a$Peptide.x <- ifelse(is.na(a$Peptide.x),a$Peptide.y, a$Peptide.x )
+  a$Peptide.x <- ifelse(is.na(a$Peptide.x),a$Peptide.x.x, a$Peptide.x )
+  a$Peptide.x <- ifelse(is.na(a$Peptide.x),a$Peptide.y.y, a$Peptide.x )
+  
+  
+  
+  a$Timepoint.x <- ifelse(is.na(a$Timepoint.x),a$Timepoint.y, a$Timepoint.x )
+  a$Timepoint.x <- ifelse(is.na(a$Timepoint.x),a$Timepoint.x.x, a$Timepoint.x )
+  a$Timepoint.x <- ifelse(is.na(a$Timepoint.x),a$Timepoint.y.y, a$Timepoint.x )
+  
+  a$Modifications.x <- ifelse(is.na(a$Modifications.x),a$Modifications.y, a$Modifications.x )
+  a$Modifications.x <- ifelse(is.na(a$Modifications.x),a$Modifications.x.x, a$Modifications.x )
+  a$Modifications.x <- ifelse(is.na(a$Modifications.x),a$Modifications.y.y, a$Modifications.x )
+  
+  
+  a <- a[, c("Modified.sequence", "Modifications.x", 'R1', 'R2', "R3", "R4", "Timepoint.x", "Peptide.x")]
+  
+  colnames(a) <- c("Modified.sequence", "Modification", R1.name, R2.name , R3.name, R4.name, "Timepoint", "Peptide")
+  return(a)
+}
+
+#run function to extract intensities per time point, run it for each time point
+
+timepoint.1 <- intensity.calc(timepoint, "0min_R1", "0min_R2", "0min_R3", "0min_R4", "0min", 
+                              "0 min R1", "0 min R2", "0 min R3", "0 min R4")
+
+timepoint.2 <- intensity.calc(timepoint, "15min_R1", "15min_R2", "15min_R3", "15min_R4", "15min", 
+                              "15min R1", "15min R2", "15min R3", "15min R4")
+
+timepoint.3 <- intensity.calc(timepoint, "30min_R1", "30min_R2", "30min_R3", "30min_R4", "30min", 
+                              "30min R1", "30min R2", "30min R3", "30min R4")
+
+timepoint.4 <- intensity.calc(timepoint, "60min_R1", "60min_R2", "60min_R3", "60min_R4", "60min", 
+                              "60min R1", "60min R2", "60min R3", "60min R4")
+
+timepoint.5 <- intensity.calc(timepoint, "120min_R1", "120min_R2", "120min_R3", "120min_R4", "120min", 
+                            "120min R1", "120min R2", "120min R3", "120min R4")
+#combine all 5 time points
+intensity.overview <- full_join(timepoint.1, timepoint.2, by="Modified.sequence")
+intensity.overview <- full_join(intensity.overview, timepoint.3, by="Modified.sequence")
+intensity.overview <- full_join(intensity.overview, timepoint.4, by="Modified.sequence")
+intensity.overview <- full_join(intensity.overview, timepoint.5, by="Modified.sequence")
+
+#add fill up missing infromation for Peptide, Modification and timepoint from all 5 timepoints
+
+intensity.overview$Peptide <- ifelse(is.na(intensity.overview$Peptide),
+                                     intensity.overview$Peptide.y.y, 
+                                     intensity.overview$Peptide )
+intensity.overview$Peptide <- ifelse(is.na(intensity.overview$Peptide),
+                                     intensity.overview$Peptide.y, 
+                                     intensity.overview$Peptide )
+
+intensity.overview$Peptide <- ifelse(is.na(intensity.overview$Peptide),
+                                     intensity.overview$Peptide.x, 
+                                     intensity.overview$Peptide )
+
+intensity.overview$Peptide <- ifelse(is.na(intensity.overview$Peptide),
+                                     intensity.overview$Peptide.x.x, 
+                                     intensity.overview$Peptide )
+
+
+
+intensity.overview$Modification <- ifelse(is.na(intensity.overview$Modification),
+                                          intensity.overview$Modification.y.y, 
+                                          intensity.overview$Modification )
+
+intensity.overview$Modification <- ifelse(is.na(intensity.overview$Modification),
+                                          intensity.overview$Modification.y, 
+                                          intensity.overview$Modification )
+
+intensity.overview$Modification <- ifelse(is.na(intensity.overview$Modification),
+                                          intensity.overview$Modification.x, 
+                                          intensity.overview$Modification )
+
+intensity.overview$Modification <- ifelse(is.na(intensity.overview$Modification),
+                                          intensity.overview$Modification.x.x, 
+                                          intensity.overview$Modification )
+
+
+
+
+intensity.overview$Timepoint <- ifelse(is.na(intensity.overview$Timepoint),
+                                          intensity.overview$Timepoint.y.y, 
+                                          intensity.overview$Timepoint )
+intensity.overview$Timepoint <- ifelse(is.na(intensity.overview$Timepoint),
+                                       intensity.overview$Timepoint.y, 
+                                       intensity.overview$Timepoint )
+intensity.overview$Timepoint <- ifelse(is.na(intensity.overview$Timepoint),
+                                       intensity.overview$Timepoint.x, 
+                                       intensity.overview$Timepoint )
+intensity.overview$Timepoint <- ifelse(is.na(intensity.overview$Timepoint),
+                                       intensity.overview$Timepoint.x.x, 
+                                       intensity.overview$Timepoint )
+
+#extract necessary columns
+
+intensity.overview.short <- intensity.overview[, c("Modified.sequence", "Peptide", "Modification", 
+                                             "0 min R1", "0 min R2", "0 min R3", "0 min R4",
+                                             "15min R1", "15min R2", "15min R3", "15min R4",
+                                             "30min R1", "30min R2", "30min R3", "30min R4",
+                                             "60min R1", "60min R2", "60min R3", "60min R4",
+                                             "120min R1", "120min R2", "120min R3", "120min R4")]
+
+# calculate avg and Sd
+
+min0 <- intensity.overview.short[,4:7] %>% mutate(avg.0min = apply(.[1:4], 1, mean, na.rm=TRUE), stDev.0min = apply(.[1:4],1,sd, na.rm=TRUE))
+min15 <- intensity.overview.short[,8:11] %>% mutate(avg.15min = apply(.[1:4], 1, mean, na.rm=TRUE), stDev.15min = apply(.[1:4],1,sd, na.rm=TRUE))
+min30 <- intensity.overview.short[,12:15] %>% mutate(avg.30min = apply(.[1:4], 1, mean, na.rm=TRUE), stDev.30min = apply(.[1:4],1,sd, na.rm=TRUE))
+min60 <- intensity.overview.short[,16:19] %>% mutate(avg.60min = apply(.[1:4], 1, mean, na.rm=TRUE), stDev.60min = apply(.[1:4],1,sd, na.rm=TRUE))
+min120 <- intensity.overview.short[,20:23] %>% mutate(avg.120min = apply(.[1:4], 1, mean, na.rm=TRUE), stDev.120min = apply(.[1:4],1,sd, na.rm=TRUE))
+
+
+#add average and sd to intensity overview
+intensity.overview.avg <- cbind.data.frame(intensity.overview.short, min0[,5:6], min15[,5:6], min30[,5:6], min60[,5:6], min120[,5:6])
+
+intensity.overview.avg$AA <- ifelse(intensity.overview.avg$Modification == "Phospho (RHSTY)", 
+                                           sub("\\(Phospho .*", "", intensity.overview.avg$Modified.sequence), NA)
+
+intensity.overview.avg$AA <- str_sub(intensity.overview.avg$AA, -1)
+
+#mutant data for the plot
+avg.intensity <- intensity.overview.avg[, c("Modified.sequence", "Peptide", "Modification", "AA", "avg.0min", "avg.15min", "avg.30min", "avg.60min", "avg.120min",
+                                        "stDev.0min", "stDev.15min", "stDev.30min", "stDev.60min", "stDev.120min")]
+
+avg.intensity.long <- melt(avg.intensity, id= c("Modified.sequence", "Peptide", "Modification", "AA"))
+#create SD column
+avg.intensity.long$SD <- avg.intensity.long[216:430, 6]
+#remove SD rows, that are now in SD column
+avg.intensity.long <- avg.intensity.long[-c(216:430),]
+
+avg.intensity.long$variable <- gsub("avg\\.", "", avg.intensity.long$variable)
+
+
+avg.intensity.long$variable <- factor(avg.intensity.long$variable, 
+                                                 levels = c("0min", "15min", "30min", "60min", "120min"))
+
+avg.intensity.long <- avg.intensity.long[!is.na(avg.intensity.long$value),]
+#extract information of unmodified peptides and pR peptides (doubly phosphorylated or oxidized peptodes were not taken into account)
+avg.intensity.long.pR.unmodi <- avg.intensity.long[avg.intensity.long$Modification == "Phospho (RHSTY)" |
+                                                     avg.intensity.long$Modification == "Unmodified",]
+
+avg.intensity.long.pR.unmodi <- avg.intensity.long.pR.unmodi[avg.intensity.long.pR.unmodi$Peptide != "Peptide_04",]
+
+```
+
+Plot pArg stability at pH2, 4C
+
+```{r}
+colourCount.Int = length(unique(avg.intensity.long.pR.unmodi$Peptide))
+getPalette.Int = colorRampPalette(brewer.pal(9, "Paired"))
+
+Intensity.plot <-
+ggplot(avg.intensity.long.pR.unmodi, aes(x=variable, y=value, group= Modified.sequence, color=Peptide))+
+  geom_line()+
+  geom_point() +
+  geom_errorbar(aes(ymin=value-SD, ymax=value+SD), width=.1)+
+  scale_color_manual(values = getPalette.Int(colourCount.Int))+
+  theme(axis.title.x = element_blank(), panel.background =  element_blank(), axis.line = element_line(), legend.position = "none")+
+  facet_wrap(~Modification)+
+  ggtitle("pH2, 4°C")
+```
+
+Calculate the ratio of pArg/unmodified peptides
+
+```{r}
+#extract pArg peptides
+avg.pR <- avg.intensity[which(avg.intensity$AA == "R"), ]
+#extract unmodified peptides
+avg.unmodi <- avg.intensity[which(avg.intensity$Modification == "Unmodified"),]
+#combine both in one table next to each other
+ratio <- left_join(avg.pR, avg.unmodi, by="Peptide")
+
+#calculate the ratio
+
+ratio.dat <- cbind.data.frame(ratio[,1:4], 
+                              ratio$avg.0min.x-ratio$avg.0min.y, 
+                              ratio$avg.15min.x-ratio$avg.15min.y,
+                              ratio$avg.30min.x-ratio$avg.30min.y,
+                              ratio$avg.60min.x-ratio$avg.60min.y,
+                              ratio$avg.120min.x-ratio$avg.120min.y)
+colnames(ratio.dat) <- c("Modified.sequence", "Peptide", "Modification", "AA", "0min", "15min", "30min", 
+                         "60min", "120min")
+#mutat date to be plotted
+ratio.data.long <- melt(ratio.dat, id= c("Modified.sequence", "Peptide", "Modification", "AA") )
+ratio.data.long$variable <- factor(ratio.data.long$variable, 
+                                   levels = c("0min", "15min", "30min", "60min", "120min"))
+
+```
+
+Plot ratio at pH2, 4C
+
+```{r}
+colourCount.ratio = length(unique(ratio.data.long$Peptide))
+getPalette.ratio = colorRampPalette(brewer.pal(9, "Paired"))
+Ratio.plot <-
+  ggplot(ratio.data.long, aes(x=variable, y=value,group=Peptide, color=Peptide))+
+  geom_point(size=2) +
+  geom_line(size=0.5)+
+  scale_color_manual(values = getPalette.ratio(colourCount.ratio))+
+  theme(axis.title.x = element_blank(), panel.background =  element_blank(), axis.line = element_line(), legend.position = "none")+
+  ylab("FC(pArg-peptide/unmodified peptide)")+
+  ggtitle("pH2, 4°C")
+```
+
+## Stability at pH2 room temperature
+
+Read "evidence.txt" and "msms.txt" from overnight stability (were search in MQ (v1.5.30.3) due to ETD,EThcD and HCD fragmentation)
+
+```{r}
+
+Stability.test.evidence.on <- read.delim("MQ_output_txt/Synthetic_peptides/Stability_room_temp/txt/evidence.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+Stability.test.msms.on <- read.delim("MQ_output_txt/Synthetic_peptides/Stability_room_temp/txt/Stability_test/on/msms.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+```
+
+Filter for contaminants
+
+```{r}
+Stability.test.evidence.on <- Stability.test.evidence.on[Stability.test.evidence.on$Potential.contaminant != "+",]
+```
+Log2 transform intensity
+
+```{r}
+Stability.test.evidence.on$log2Intensity <- log2(Stability.test.evidence.on$Intensity)
+```
+
+Change column name so that it is the same name in msms and evidence 
+
+```{r}
+colnames(Stability.test.msms.on)[colnames(Stability.test.msms.on)=="id"] <- "Best.MS.MS"
+```
+
+Select only "Multi-MSMS" in evidence table and "HCD" fragmentation in msms.txt
+
+```{r}
+Stability.test.Multi.MSMS.on <- Stability.test.evidence.on[Stability.test.evidence.on$Type == "MULTI-MSMS",]
+
+Stability.test.msms.HCD <- Stability.test.msms.on[Stability.test.msms.on$Fragmentation == "HCD",]
+```
+
+Split data into time points
+
+```{r}
+timepoint.on <- split(Stability.test.Multi.MSMS.on, f= Stability.test.Multi.MSMS.on$Experiment)
+```
+
+Extract the log2 intensity for the individule time points per replicate and average the intensity per time point
+
+```{r}
+intensity.calc.on <- function(timelist, point1, point2,point3, point4, timepoint, R1.name, R2.name, R3.name, R4.name){
+  
+  R1 <- as.data.frame(timelist[[point1]]) %>% select(Modified.sequence, Modifications, log2Intensity, Proteins) %>% 
+    group_by(Modified.sequence, Modifications) %>% summarise(R1 = sum(log2Intensity), Timepoint = timepoint, Peptide = Proteins)
+  
+  R1 <- unique(R1)
+  
+  R2 <- as.data.frame(timelist[[point2]]) %>% select(Modified.sequence, Modifications, log2Intensity, Proteins) %>% 
+    group_by(Modified.sequence, Modifications) %>% summarise(R2 = sum(log2Intensity), Timepoint = timepoint, Peptide = Proteins)
+  
+  R2 <- unique(R2)
+  
+  R3 <- as.data.frame(timelist[[point3]]) %>% select(Modified.sequence, Modifications, log2Intensity, Proteins) %>% 
+    group_by(Modified.sequence, Modifications) %>% summarise(R3 = sum(log2Intensity), Timepoint = timepoint, Peptide = Proteins)
+  R3 <- unique(R3)
+  
+  R4 <- as.data.frame(timelist[[point4]]) %>% select(Modified.sequence, Modifications, log2Intensity, Proteins) %>% 
+    group_by(Modified.sequence, Modifications) %>% summarise(R4 = sum(log2Intensity), Timepoint = timepoint, Peptide = Proteins)
+  R4 <- unique(R4)
+  
+  a <- full_join(R1, R2, by="Modified.sequence")
+  a<- full_join(a, R3, by="Modified.sequence")
+  a <- full_join(a, R4, by="Modified.sequence")
+  
+  a$Peptide.x <- ifelse(is.na(a$Peptide.x),a$Peptide.y, a$Peptide.x )
+  a$Peptide.x <- ifelse(is.na(a$Peptide.x),a$Peptide.x.x, a$Peptide.x )
+  a$Peptide.x <- ifelse(is.na(a$Peptide.x),a$Peptide.y.y, a$Peptide.x )
+  
+  
+  
+  a$Timepoint.x <- ifelse(is.na(a$Timepoint.x),a$Timepoint.y, a$Timepoint.x )
+  a$Timepoint.x <- ifelse(is.na(a$Timepoint.x),a$Timepoint.x.x, a$Timepoint.x )
+  a$Timepoint.x <- ifelse(is.na(a$Timepoint.x),a$Timepoint.y.y, a$Timepoint.x )
+  
+  a$Modifications.x <- ifelse(is.na(a$Modifications.x),a$Modifications.y, a$Modifications.x )
+  a$Modifications.x <- ifelse(is.na(a$Modifications.x),a$Modifications.x.x, a$Modifications.x )
+  a$Modifications.x <- ifelse(is.na(a$Modifications.x),a$Modifications.y.y, a$Modifications.x )
+  
+  
+  a <- a[, c("Modified.sequence", "Modifications.x", 'R1', 'R2', "R3", "R4", "Timepoint.x", "Peptide.x")]
+  
+  colnames(a) <- c("Modified.sequence", "Modification", R1.name, R2.name , R3.name, R4.name, "Timepoint", "Peptide")
+  return(a)
+}
+
+timepoint.on.1 <- intensity.calc.on(timepoint.on, "0min_R1", "0min_R2", "0min_R3", "0min_R4", "0min", 
+                                 "0min R1", "0min R2", "0min R3", "0min R4")
+timepoint.on.2 <- intensity.calc.on(timepoint.on, "24hr_R1", "24hr_R2", "24hr_R3", "24hr_R4", "24hr", 
+                                 "24hr R1", "24hr R2", "24hr R3", "24hr R4")
+#combine both timepoints
+intensity.overview.on <- full_join(timepoint.on.1, timepoint.on.2, by="Modified.sequence")
+
+#add missing information of Peptide, modification and timepoint
+intensity.overview.on$Peptide.x <- ifelse(is.na(intensity.overview.on$Peptide.x),
+                                          intensity.overview.on$Peptide.y, 
+                                          intensity.overview.on$Peptide.x )
+
+
+intensity.overview.on$Modification.x <- ifelse(is.na(intensity.overview.on$Modification.x),
+                                               intensity.overview.on$Modification.y, 
+                                               intensity.overview.on$Modification.x )
+
+intensity.overview.on$Timepoint.x <- ifelse(is.na(intensity.overview.on$Timepoint.x),
+                                            intensity.overview.on$Timepoint.y, 
+                                            intensity.overview.on$Timepoint.x )
+
+#extract neccessary columns
+
+intensity.overview.on.short <- intensity.overview.on[, c("Modified.sequence", "Peptide.x", "Modification.x", 
+                                                         "0min R1", "0min R2", "0min R3", "0min R4",
+                                                         "24hr R1", "24hr R2", "24hr R3", "24hr R4")]
+
+### calculate avg and Sd
+hr0 <- intensity.overview.on.short[,4:7] %>% mutate(avg.0min = apply(.[1:4], 1, mean, na.rm=TRUE), stDev.0min = apply(.[1:4],1,sd, na.rm=TRUE))
+hr24 <- intensity.overview.on.short[,8:11] %>% mutate(avg.24hr = apply(.[1:4], 1, mean, na.rm=TRUE), stDev.24hr = apply(.[1:4],1,sd, na.rm=TRUE))
+
+#add average and standard deviation to intensity overview
+intensity.overview.avg.on <- cbind.data.frame(intensity.overview.on.short, hr0[,5:6], hr24[,5:6])
+
+intensity.overview.avg.on$AA <- ifelse(intensity.overview.avg.on$Modification == "Phospho (RHSTY)", 
+                                       sub("\\(ph.*", "", intensity.overview.avg.on$Modified.sequence), NA)
+
+intensity.overview.avg.on$AA <- str_sub(intensity.overview.avg.on$AA, -1)
+
+#extract neccessary columns
+avg.intensity.on <- intensity.overview.avg.on[, c("Modified.sequence", "Peptide.x", "Modification.x", "AA", "avg.0min", "avg.24hr",
+                                                  "stDev.0min", "stDev.24hr")]
+
+```
+
+Calculate the ratio of pArg/unmodified peptides
+
+```{r}
+#extract pArg peptides
+avg.pR.on <- avg.intensity.on[which(avg.intensity.on$AA == "R"), ]
+#extract unmodified peptides
+avg.unmodi.on <- avg.intensity.on[which(avg.intensity.on$Modification == "Unmodified"),]
+#combine both list next to each other
+ratio.on <- left_join(avg.pR.on, avg.unmodi.on, by="Peptide.x")
+
+#calculate the ratio
+ratio.dat.on <- cbind.data.frame(ratio.on[,1:4], 
+                                 ratio.on$avg.0min.x-ratio.on$avg.0min.y,
+                                 ratio.on$avg.24hr.x-ratio.on$avg.24hr.y)
+colnames(ratio.dat.on) <- c("Modified.sequence", "Peptide", "Modification", "AA", "0min", "24hr")
+
+#mutat data to be plotted
+ratio.data.on.long <- melt(ratio.dat.on, id= c("Modified.sequence", "Peptide", "Modification", "AA") )
+ratio.data.on.long$variable <- factor(ratio.data.on.long$variable, 
+                                      levels = c("0min", "24hr"))
+
+
+```
+
+Plot ratio at pH2, room temperature
+
+```{r}
+Ratio.plot.on <-
+  ggplot(ratio.data.on.long, aes(x=variable, y=value,group=Peptide, color=Peptide))+
+  geom_point(size=2) +
+  geom_line(size=0.5)+
+  scale_color_manual(values = getPalette.ratio(colourCount.ratio))+
+  theme(axis.title.x = element_blank(), panel.background =  element_blank(), axis.line = element_line(), legend.position = "none")+
+  ylab("FC(pArg-peptide/unmodified peptide)")+
+  ggtitle("pH2, room temperature")
+```
+
+## Retention time (RT) analysis
+
+Read "evidence.txt" and "msms.txt" from iRT runs of synthetic pArg and pSTY peptides
+
+```{r}
+evidence.pArg <- read.delim("MQ_output_txt/Synthetic_peptides/Retentiontime/pArg/txt/evidence_pArg_iRT.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+msms.pArg <- read.delim("MQ_output_txt/Synthetic_peptides/Retentiontime/pArg/txt/msms_pArg_iRT.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+evidence.pSTY <- read.delim("MQ_output_txt/Synthetic_peptides/Retentiontime/pSTY/txt/evidence_pSTY_iRT.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+msms.pSTY <- read.delim("MQ_output_txt/Synthetic_peptides/Retentiontime/pSTY/txt/msms_pSTY_iRT.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+
+```
+
+Filter for contaminants 
+
+```{r}
+evidence.pArg <- evidence.pArg[evidence.pArg$Potential.contaminant != "+",]
+
+evidence.pSTY <- evidence.pSTY[evidence.pSTY$Potential.contaminant != "+",]
+```
+
+Log2 tranfomration of intensities
+
+```{r}
+evidence.pArg$log2Intensity <- log2(evidence.pArg$Intensity)
+evidence.pSTY$log2Intensity <- log2(evidence.pSTY$Intensity)
+
+```
+
+Change column name so that it is the same in msms.txt and evidence.txt
+
+```{r}
+colnames(msms.pArg)[colnames(msms.pArg)=="id"] <- "Best.MS.MS"
+colnames(msms.pSTY)[colnames(msms.pSTY)=="id"] <- "Best.MS.MS"
+
+```
+
+Filter for "MULTI-MSMS" in evidence table
+
+```{r}
+evidence.pArg.Multi.MSMS <- evidence.pArg[evidence.pArg$Type == "MULTI-MSMS",]
+evidence.pSTY.Multi.MSMS <- evidence.pSTY[evidence.pSTY$Type == "MULTI-MSMS",]
+
+```
+
+Extract site of phosphorylation
+
+```{r}
+evidence.pArg.Multi.MSMS$AA <-  ifelse(evidence.pArg.Multi.MSMS$Modification == "Phospho (RHSTY)", 
+                                      sub("\\(Phospho .*", "", evidence.pArg.Multi.MSMS$Modified.sequence), NA)
+
+evidence.pArg.Multi.MSMS$AA <- str_sub(evidence.pArg.Multi.MSMS$AA, -1)
+
+evidence.pSTY.Multi.MSMS$AA <-  ifelse(evidence.pSTY.Multi.MSMS$Modification == "Phospho (RHSTY)", 
+                                       sub("\\(Phospho .*", "", evidence.pSTY.Multi.MSMS$Modified.sequence), NA)
+
+evidence.pSTY.Multi.MSMS$AA <- str_sub(evidence.pSTY.Multi.MSMS$AA, -1)
+
+```
+
+Extract best scoring peptides for cases of multiple identification
+
+```{r}
+RT.pArg <- evidence.pArg.Multi.MSMS %>% select(Modified.sequence, Modifications, Proteins, Retention.time, AA, Charge, Score, Experiment) %>%
+  group_by(Modified.sequence, Modifications, AA, Charge, Experiment) %>% 
+  slice_max(Score)
+
+RT.pSTY <- evidence.pSTY.Multi.MSMS %>% select(Modified.sequence, Modifications, Proteins, Retention.time, AA, Charge, Score, Experiment) %>%
+  group_by(Modified.sequence, Modifications, AA, Charge, Experiment) %>% 
+  slice_max(Score)
+```
+
+Calculate the average RT and SD based on Sequence, Modification, AA and Charge
+
+```{r}
+RT.pArg.avg <- RT.pArg %>% select(Modified.sequence, Modifications, Proteins, Retention.time, AA, Charge) %>%
+  group_by(Modified.sequence, Modifications, AA, Charge) %>% 
+  mutate(avg.RT = mean(Retention.time), sd.RT = sd(Retention.time)) %>% distinct(avg.RT,.keep_all = TRUE)
+
+RT.pArg.avg$ID <- paste(RT.pArg.avg$Proteins, RT.pArg.avg$Charge, sep = ";")
+
+RT.pSTY.avg <- RT.pSTY %>% select(Modified.sequence, Modifications, Proteins, Retention.time, AA, Charge) %>%
+  group_by(Modified.sequence, Modifications, AA, Charge) %>% 
+  mutate(avg.RT = mean(Retention.time), sd.RT = sd(Retention.time)) %>% distinct(avg.RT,.keep_all = TRUE)
+RT.pSTY.avg$ID <- paste(RT.pSTY.avg$Proteins, RT.pSTY.avg$Charge, sep = ";")
+###Extract RT information for unmodified sequences
+RT.pArg.unmodified <- RT.pArg.avg[RT.pArg.avg$Modifications == "Unmodified",]
+RT.pSTY.unmodified <- RT.pSTY.avg[RT.pSTY.avg$Modifications == "Unmodified",]
+###extract RT information for pArg
+RT.pArg.R <- RT.pArg.avg[RT.pArg.avg$Modifications == "Phospho (RHSTY)" & RT.pArg.avg$AA == "R",]
+
+RT.pSTY <- RT.pSTY.avg[RT.pSTY.avg$Modifications == "Phospho (RHSTY)" & RT.pSTY.avg$AA == "S" |
+                         RT.pSTY.avg$Modifications == "Phospho (RHSTY)" & RT.pSTY.avg$AA == "T"  |
+                         RT.pSTY.avg$Modifications == "Phospho (RHSTY)" & RT.pSTY.avg$AA == "Y" ,]
+#combin RT for pSTY and pArg based on ID
+RT.comparison <- full_join(RT.pSTY, RT.pArg.R, by = "ID")
+#filter for valdi values (peptides that are identified as pArg and pSTY)
+RT.comparison.valid <- RT.comparison[!is.na(RT.comparison$Modified.sequence.y) & 
+                                       !is.na(RT.comparison$Modified.sequence.x),]
+```
+
+Extract information from iRT peptides as reference
+
+```{r}
+RT.pR.iRT <- RT.pArg.avg[RT.pArg.avg$Proteins == "iRT",]
+RT.pSTY.iRT <- RT.pSTY.avg[RT.pSTY.avg$Proteins == "iRT",]
+#all iRT peptides are called iRT change it to counted iRT peptides
+RT.pSTY.iRT$Proteins <- c("iRT_01", "iRT_02", "iRT_03", "iRT_04", "iRT_05", "iRT_06",
+                          "iRT_07", "iRT_08", "iRT_09", "iRT_10")
+RT.pR.iRT$Proteins <- c("iRT_01", "iRT_02", "iRT_03", "iRT_04", "iRT_05", "iRT_06",
+                        "iRT_07", "iRT_08", "iRT_09", "iRT_10")
+
+
+iRT.comparison <- full_join(RT.pSTY.iRT, RT.pR.iRT, by= "Proteins")
+```
+
+Plot pSTY as function of pArg RT with iRT as reference standard
+
+```{r}
+colourCount.RT = length(unique(RT.comparison.valid$Proteins.x))
+getPalette.RT = colorRampPalette(brewer.pal(9, "Paired"))
+
+#plot pARg agains pSTY and regession through iRT peptides colourd in purple
+RT.plot.STY <- 
+  ggplot(RT.comparison.valid, aes(x=avg.RT.x ,y=avg.RT.y))+
+  geom_point(aes(shape=AA.x))+
+  geom_errorbar(aes(ymin=avg.RT.y-sd.RT.y, ymax=avg.RT.y+sd.RT.y), width=.025, color="black")+
+  geom_errorbar(aes(xmin=avg.RT.x-sd.RT.x, xmax=avg.RT.x+sd.RT.x), width=.025, color="black")+
+  geom_point(data = iRT.comparison, aes(x=avg.RT.x ,y=avg.RT.y), color= "purple")+
+  geom_smooth(data = iRT.comparison, method = "lm", fullrange=TRUE, color="grey", 
+              linetype="dashed")+
+  xlim(10,30)+
+  ylim(10,30)+
+  xlab("Retention time pSTY peptide")+
+  ylab("Retention time pArg peptide")+
+  theme(panel.background =  element_blank(), axis.line = element_line())
+
+```
+
+Mutate data to plot pARg against unmodified peptides
+
+```{r}
+
+RT.unmdoified.comparison <- full_join(RT.pArg.unmodified, RT.pArg.R, by = "Proteins")
+#remove NAs for peptides that are only identified as unmodified or pArg
+RT.unmdoified.comparison <- RT.unmdoified.comparison[!is.na(RT.unmdoified.comparison$Experiment.y),]
+```
+
+Plot pArg RT as function of unmodified peptide RT 
+
+```{r}
+colourCount.RT = length(unique(RT.unmdoified.comparison$Proteins))
+getPalette.RT = colorRampPalette(brewer.pal(9, "Paired"))
+#plot RT of pArg agains RT unmodified with diagonal for ideal RT behaviour if both would have the same
+RT.plot <- 
+  ggplot(RT.unmdoified.comparison, aes(x=avg.RT.x ,y=avg.RT.y, color=Proteins))+
+  geom_point()+
+  geom_errorbar(aes(ymin=avg.RT.y-sd.RT.y, ymax=avg.RT.y+sd.RT.y), width=.025, color="black")+
+  geom_errorbar(aes(xmin=avg.RT.x-sd.RT.x, xmax=avg.RT.x+sd.RT.x), width=.025, color="black")+
+  scale_color_manual(values = getPalette.Int(colourCount.Int))+
+  xlim(10,30)+
+  ylim(10,30)+
+  geom_abline(intercept = 0, slope = 1, color="black", 
+              linetype="dashed", size=1)+
+  xlab("Retention time unmodified peptide")+
+  ylab("Retention time pArg peptide")+
+  theme(panel.background =  element_blank(), axis.line = element_line(), legend.position = "none")
+```
+
+## Combine all figures as figure 2
+
+```{r}
+ggarrange(ggarrange(Intensity.plot, labels = "a)"),
+          ggarrange(Ratio.plot, Ratio.plot.on ,labels = c("b)", "c)"), ncol = 2),
+          ggarrange(RT.plot, RT.plot.STY, labels = c("d)", "e)"), ncol = 2),
+          nrow = 3)
+```

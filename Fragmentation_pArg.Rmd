@@ -1,0 +1,749 @@
+---
+title: "Fragmentation_pArg"
+author: "Nadine Prust"
+date: "4/13/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Fragementation analysis: ETD vs EThcD vs HCD
+
+All necessary data is deposited on Pride and can be downloaded. The used files for this script can be found in the MQ_output_txt.zip and Neutral_loss.zip file. Add the MQ_output_txt folder as well as the Neutral_loss folderto your project folder to access the required data. 
+
+```{r}
+library(dplyr)
+library(stringi)
+library(stringr)
+library(reshape2)
+library(ggpubr)
+```
+
+Load in the "evidence.txt" and "msms.txt" generated with MaxQuant (Version 1.5.3.30) for the fragmentation comparison run Orbitrap Fuison Lumos
+for the analysis of sequence coverage, Andromeda score and localization probability.
+
+```{r}
+msms.etd <- read.delim("MQ_output_txt/Synthetic_peptides/Fragmentation/txt/msms.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+evidence.etd <- read.delim("MQ_output_txt/Synthetic_peptides/Fragmentation/txt/evidence.etd.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+
+```
+
+
+
+Filter for contaminants
+
+``` {r}
+evidence.etd <- evidence.etd[evidence.etd$Potential.contaminant != "+",]
+
+```
+
+Log2 transform the intensity
+```{r}
+evidence.etd$log2Intensity <- log2(evidence.etd$Intensity)
+```
+Change column name so that it is the same in msms and evidence: Best.MS.MS corresponds to id in msms
+
+```{r}
+colnames(msms.etd)[colnames(msms.etd)=="id"] <- "Best.MS.MS"
+```
+
+Remove _ from modified.sequence column before and after the sequence
+```{r}
+evidence.etd$Modified.sequence <- gsub("_", "", evidence.etd$Modified.sequence)
+
+msms.etd$Modified.sequence <- gsub("_", "", msms.etd$Modified.sequence)
+```
+
+Determine position of phospho within the peptide
+
+```{r}
+evidence.etd$pR.position.min <-lapply(gregexpr(pattern= "\\(ph\\)", evidence.etd$Modified.sequence), min) 
+evidence.etd$OX <-lapply(gregexpr(pattern= "\\(ox\\)", evidence.etd$Modified.sequence), min) 
+```
+
+Change min in numeric column, if the value is now -1 it's an unmodified peptide, otherwise substract 1 since annotation is R(ph)
+
+```{r}
+evidence.etd$pR.position.min <- as.numeric(vapply(evidence.etd$pR.position.min, paste, collapse = ", ", character(1L)))
+evidence.etd$OX <- as.numeric(vapply(evidence.etd$OX, paste, collapse = ", ", character(1L)))
+
+evidence.etd$pR.position.min <-   ifelse(evidence.etd$pR.position.min == -1,NA , evidence.etd$pR.position.min-1)
+```
+Note other modifications as oxidations are now neglected
+
+Determine the first possible NL and add y for annotation in column and calculate the number of potential NL ions
+
+```{r}
+evidence.etd$Expected.NL.ion <- evidence.etd$Length - evidence.etd$pR.position.min +1
+evidence.etd$no.potential.NL.ion <-  evidence.etd$Length- evidence.etd$Expected.NL.ion+1 
+
+
+evidence.etd$Expected.NL.ion <-ifelse(is.na(evidence.etd$Expected.NL.ion), 
+                                      evidence.etd$Expected.NL.ion, paste("y",evidence.etd$Expected.NL.ion, sep = ""))
+
+```
+
+Make function to combine y and y.loss ions in one to calculate over all y-ion series coverage and remove duplicates. Calculate coverage for each peptide and each fragmentation methods: extracts number of y- and b- as well as c- and z- ions from msms file and links it to evidence table which is filtered for MULTI-MSMS
+
+```{r}
+rem_dup.one <- function(x){
+  paste(unique(tolower(trimws(unlist(strsplit(x,split="(?!')[ [:punct:]]",fixed=F,perl=T))))),collapse = " ")
+}
+
+covarage <- function(df, df2, ID, peptides){
+ final <- data.frame()
+  
+  counter=0
+  
+  for (element_df in df$Best.MS.MS) {
+    counter <- counter+1
+    current_row <- df[df$Best.MS.MS == element_df,]
+    
+    if ( current_row$Fragmentation == "HCD") {
+      current_row$y <- str_extract_all(current_row$Matches, "y\\d+;")
+      current_row$y.loss <- str_extract_all(current_row$Matches, "y\\d+\\*")
+      current_row$number.y.loss <- str_count(current_row$Matches, "y\\d+\\*")
+      current_row$number.y <- str_count(current_row$Matches, "y\\d+;")
+      
+      current_row$b <- str_extract_all(current_row$Matches, "b\\d{1,2}")
+      current_row$y.pc <- current_row$number.y/current_row$Length*100
+      
+      current_row$y <- vapply(current_row$y, paste, collapse = ", ", character(1L))
+      current_row$y <- gsub(";", "", current_row$y)
+      current_row$y.loss <- vapply(current_row$y.loss, paste, collapse = ", ", character(1L))
+      current_row$b <-  vapply(current_row$b, paste, collapse = ", ", character(1L))
+      current_row$b <- gsub(";", "", current_row$b)
+      current_row$b <- sapply(current_row$b ,function(x) rem_dup.one(x))
+      current_row$number.b <- str_count(current_row$b, "b\\d{1,2}")
+      current_row$b.pc <- current_row$number.b/current_row$Length*100
+      
+      
+      current_row$all.y.ion <- paste(current_row$y, current_row$y.loss, sep = ",")
+      current_row$all.y.ion <- gsub("\\*", "", current_row$all.y.ion)
+      current_row$all.y.ion <- sapply(current_row$all.y.ion ,function(x) rem_dup.one(x))
+      current_row$number.all.y <- str_count(current_row$all.y.ion, "y\\d+")
+      
+      current_row$coverage <- (current_row$number.b+current_row$number.y)/(2*current_row$Length)*100 
+      current_row$coverage.all <- (current_row$number.b+current_row$number.all.y)/(2*current_row$Length)*100 
+      
+      final.df <- current_row
+      final.df['c'] <- NA
+      final.df['c.radical'] <- NA
+      final.df['number.c'] <- NA
+      final.df['number.c.radical'] <- NA
+      final.df['z.radical']<- NA
+      final.df['z']<- NA
+      final.df['number.z.radical']<- NA
+      final.df['number.z']<-NA
+      final.df['c.pc']<- NA
+      final.df['z.radical.pc'] <- NA
+      final.df['all.c']<- NA
+      final.df['number.all.c']<- NA
+      final.df['all.z'] <- NA
+      final.df['number.all.z'] <- NA
+    }
+    else if(current_row$Fragmentation == "ETD") {
+      
+      current_row$c <- str_extract_all(current_row$Matches, "c\\d+")
+      current_row$c.radical <- str_extract_all(current_row$Matches, "cm\\d+")
+      current_row$number.c <- str_count(current_row$Matches, "c\\d+")
+      current_row$number.c.radical <- str_count(current_row$Matches, "cm\\d+")
+      
+      current_row$z.radical <- str_extract_all(current_row$Matches, "z°\\d+")
+      current_row$z <- str_extract_all(current_row$Matches, "z\\'\\d+")
+      current_row$number.z.radical <- str_count(current_row$Matches, "z°\\d+")
+      current_row$number.z <- str_count(current_row$Matches, "z\\'\\d+")
+      
+      current_row$c.pc <- current_row$number.c/current_row$Length*100
+      current_row$z.radical.pc <- current_row$number.z.radical/current_row$Length*100
+      
+      current_row$c <- vapply(current_row$c, paste, collapse = ", ", character(1L))
+      current_row$c <- gsub(";", "", current_row$c)
+      current_row$c.radical <- vapply(current_row$c.radical, paste, collapse = ", ", character(1L))
+      current_row$c.radical <- gsub(";", "", current_row$c.radical)
+      current_row$z.radical <-  vapply(current_row$z.radical, paste, collapse = ", ", character(1L))
+      current_row$z <-  vapply(current_row$z, paste, collapse = ", ", character(1L))
+      
+      current_row$all.c <- paste(current_row$c, current_row$c.radical, sep = ",")
+      current_row$all.c <- gsub("m", "", current_row$all.c)
+      current_row$all.c <- sapply(current_row$all.c ,function(x) rem_dup.one(x))
+      current_row$number.all.c <- str_count(current_row$all.c, "c\\d+")
+      
+      current_row$all.z <- paste(current_row$z, current_row$z.radical, sep = ",")
+      current_row$all.z <- gsub("°", "", current_row$all.z)
+      current_row$all.z <- gsub("'", "", current_row$all.z)
+      current_row$all.z <- sapply(current_row$all.z ,function(x) rem_dup.one(x))
+      current_row$number.all.z <- str_count(current_row$all.z, "z\\d+")
+      
+      
+      current_row$coverage <- (current_row$number.c+current_row$number.z.radical)/(2*current_row$Length)*100 
+      current_row$coverage.all <- (current_row$number.all.c+current_row$number.all.z)/(2*current_row$Length)*100 
+      
+      final.df <-current_row
+      final.df['y']<- NA
+      final.df['y.loss']<- NA
+      final.df['number.y.loss']<- NA
+      final.df['number.y']<- NA
+      final.df['b'] <- NA
+      final.df['number.b']<- NA
+      final.df['y.pc']<- NA
+      final.df['b.pc']<- NA
+      final.df['all.y.ion']<-NA
+      final.df['number.all.y'] <- NA
+      
+    }
+    else {
+      current_row$y <- str_extract_all(current_row$Matches, "y\\d+;")
+      current_row$y.loss <- str_extract_all(current_row$Matches, "y\\d+\\*")
+      current_row$number.y.loss <- str_count(current_row$Matches, "y\\d+\\*")
+      current_row$number.y <- str_count(current_row$Matches, "y\\d+;")
+      
+      current_row$b <- str_extract_all(current_row$Matches, "b\\d{1,2}")
+
+      current_row$y.pc <- current_row$number.y/current_row$Length*100
+
+      current_row$y <- vapply(current_row$y, paste, collapse = ", ", character(1L))
+      current_row$y <- gsub(";", "", current_row$y)
+      current_row$y.loss <- vapply(current_row$y.loss, paste, collapse = ", ", character(1L))
+      current_row$b <-  vapply(current_row$b, paste, collapse = ", ", character(1L))
+      current_row$b <- gsub(";", "", current_row$b)
+      current_row$b <- sapply(current_row$b ,function(x) rem_dup.one(x))
+      current_row$number.b <- str_count(current_row$b, "b\\d{1,2}")
+      current_row$b.pc <- current_row$number.b/current_row$Length*100
+      
+      
+      current_row$all.y.ion <- paste(current_row$y, current_row$y.loss, sep = ",")
+      current_row$all.y.ion <- gsub("\\*", "", current_row$all.y.ion)
+      current_row$all.y.ion <- sapply(current_row$all.y.ion ,function(x) rem_dup.one(x))
+      current_row$number.all.y <- str_count(current_row$all.y.ion, "y\\d+")
+      
+      
+      
+      current_row$c <- str_extract_all(current_row$Matches, "c\\d+")
+      current_row$c.radical <- str_extract_all(current_row$Matches, "cm\\d+")
+      current_row$number.c <- str_count(current_row$Matches, "c\\d+")
+      current_row$number.c.radical <- str_count(current_row$Matches, "cm\\d+")
+      
+      current_row$z.radical <- str_extract_all(current_row$Matches, "z°\\d+")
+      current_row$z <- str_extract_all(current_row$Matches, "z\\'\\d+")
+      current_row$number.z.radical <- str_count(current_row$Matches, "z°\\d+")
+      current_row$number.z <- str_count(current_row$Matches, "z\\'\\d+")
+      
+      current_row$c.pc <- current_row$number.c/current_row$Length*100
+      current_row$z.radical.pc <- current_row$number.z.radical/current_row$Length*100
+      
+      current_row$c <- vapply(current_row$c, paste, collapse = ", ", character(1L))
+      current_row$c <- gsub(";", "", current_row$c)
+      current_row$c.radical <- vapply(current_row$c.radical, paste, collapse = ", ", character(1L))
+      current_row$c.radical <- gsub(";", "", current_row$c.radical)
+      current_row$z.radical <-  vapply(current_row$z.radical, paste, collapse = ", ", character(1L))
+      current_row$z <-  vapply(current_row$z, paste, collapse = ", ", character(1L))
+      
+      current_row$all.c <- paste(current_row$c, current_row$c.radical, sep = ",")
+      current_row$all.c <- gsub("m", "", current_row$all.c)
+      current_row$all.c <- sapply(current_row$all.c ,function(x) rem_dup.one(x))
+      current_row$number.all.c <- str_count(current_row$all.c, "c\\d+")
+      
+      current_row$all.z <- paste(current_row$z, current_row$z.radical, sep = ",")
+      current_row$all.z <- gsub("°", "", current_row$all.z)
+      current_row$all.z <- gsub("'", "", current_row$all.z)
+      current_row$all.z <- sapply(current_row$all.z ,function(x) rem_dup.one(x))
+      current_row$number.all.z <- str_count(current_row$all.z, "z\\d+")
+      
+      current_row$coverage <- (current_row$number.y + current_row$number.b+ current_row$number.c+current_row$number.z.radical)/(4*current_row$Length)*100 
+      current_row$coverage.all <- (current_row$number.all.y + current_row$number.b+ current_row$number.all.c  +current_row$number.all.z)/(4*current_row$Length)*100 
+      
+      final.df <- current_row
+    }
+    
+    final <- bind_rows(final,current_row)
+  }
+  
+  a <- left_join(df2, final, by= ID)
+  
+  b <- a[a$Type.y == "MULTI-MSMS",]
+  
+  
+  return(b)
+  
+  
+}
+
+Best.MS.MS.coverage <- covarage(msms.etd, evidence.etd, "Best.MS.MS")
+```
+
+Determine if NL ion was identified
+
+```{r}
+Best.MS.MS.coverage$NL.ion <- mapply(grepl, pattern=Best.MS.MS.coverage$Expected.NL.ion, x=Best.MS.MS.coverage$y.loss)
+Best.MS.MS.coverage$NL.ion <- ifelse(Best.MS.MS.coverage$NL.ion == 1, "YES", "NO")
+
+```
+
+Extract for each peptide, each modification and each fragmentation method the max coverage in each replicate
+
+```{r}
+Fragmentation.overview <- Best.MS.MS.coverage %>% group_by(Proteins.x, Modified.sequence.x, Fragmentation, Experiment) %>% 
+  summarise(Proteins.x,Modified.sequence.x, Modifications.x, Experiment, Scan.number, Best.MS.MS, log2Intensity, 
+            Score.x, Localization.prob, Retention.time.x, Charge.x, y, 
+            y.loss, b, c,c.radical, z.radical, z, pR.position.min, Expected.NL.ion, 
+            no.potential.NL.ion, y.pc, b.pc, c.pc, z.radical.pc,
+            coverage, coverage.all, NL.ion, best.coverage = max(coverage.all)) 
+
+
+```
+
+Calculate for each peptide, each modification and each fragmentation method the average coverage and average Score in n=4 biological replicates
+
+```{r}
+Fragmentation.overview.avg<- Fragmentation.overview %>% group_by(Proteins.x,Modified.sequence.x, Modifications.x, Fragmentation) %>% 
+  mutate(avg.coverage = mean(coverage.all), sd.coverage = sd(coverage.all, na.rm=TRUE), 
+         avg.score = mean(Score.x), sd.score=sd(Score.x, na.rm = TRUE), 
+         avg.loc.prob = mean(Localization.prob), sd.loc.prob=sd(Localization.prob, na.rm = TRUE))
+
+```
+
+Extract max Andromeda localization probability per peptide per fragmentation
+
+```{r}
+Fragmentation.max.localization <- Fragmentation.overview.avg %>% 
+  group_by(Proteins.x, Modified.sequence.x, Fragmentation, Modifications.x) %>%
+  slice_max(Localization.prob) %>% distinct(Localization.prob, .keep_all = TRUE) 
+```
+
+Extract the average sequence coverage
+
+```{r}
+Fragmentation.avg.coverage<- Fragmentation.overview.avg %>% 
+  group_by(Proteins.x, Modified.sequence.x, Fragmentation, Modifications.x) %>% 
+  distinct(avg.coverage, .keep_all = TRUE) 
+```
+Extract average score per peptide per fragmentation 
+
+```{r}
+Fragmentation.avg.score <- Fragmentation.overview.avg %>% 
+  group_by(Proteins.x, Modified.sequence.x, Fragmentation, Modifications.x) %>% 
+  distinct(avg.score, .keep_all = TRUE) 
+
+#convert into long list 
+Fragmentation.avg.score.long <- Fragmentation.avg.score[, c("Proteins.x", "Modified.sequence.x", 
+                                                            "Fragmentation", "avg.score", "sd.score")]
+
+
+Fragmentation.avg.score.long <- melt(Fragmentation.avg.score.long, id=c("Proteins.x", "Modified.sequence.x",
+                                                                        'Fragmentation'))
+#add column with SD
+Fragmentation.avg.score.long$SD <- Fragmentation.avg.score.long[63:124, 5] 
+Fragmentation.avg.score.long <- Fragmentation.avg.score.long[-c(63:124),]
+
+```
+
+Plot average coverage and avg Score per peptide, per PTM and fragmentation method
+
+```{r}
+
+ggplot()+
+  geom_bar(data=Fragmentation.avg.coverage, aes(x=Fragmentation , y=avg.coverage, fill=Fragmentation),
+           stat='identity', position = position_dodge())+
+  geom_errorbar(data= Fragmentation.avg.coverage, 
+                aes(x= Fragmentation, ymin=avg.coverage - sd.coverage, ymax=avg.coverage + sd.coverage), 
+                width=.1)+
+  scale_fill_manual(values = c("#ce1256","#a45bba", "#5ab4ad")) +    
+  theme_classic()+
+  geom_point(data=Fragmentation.avg.score.long, 
+             aes(x=Fragmentation , y=value/10, group=Modified.sequence.x), size=1.5)+
+  geom_errorbar(data= Fragmentation.avg.score.long, 
+                aes(x= Fragmentation, ymin=value/10- SD/10, ymax=value/10 + SD/10), width=.1, color="grey")+
+  scale_y_continuous(sec.axis = sec_axis( trans=~.*10, name="average Score"))+
+  theme_classic() +  
+  facet_wrap(~Modified.sequence.x)
+```
+Plot average score and average coverage distribution per fragmentation method
+
+```{r}
+avg.score.plot <- 
+  Fragmentation.avg.score %>%
+  ggplot(aes(x=Fragmentation, y=avg.score, fill=Fragmentation)) +
+  geom_violin(color="black", show.legend = FALSE)+
+  scale_fill_manual(values = c("#ce1256","#a45bba", "#5ab4ad")) +
+  geom_boxplot(width=0.1, show.legend = FALSE)+
+  stat_summary(fun=mean, geom="point", shape=23, size=3, show.legend = FALSE)+
+  theme(axis.title.x = element_blank(), panel.background =  element_blank(), axis.line = element_line())+
+  ylab("Average Andromeda score")
+
+avg.coverage.plot <- 
+  Fragmentation.avg.coverage %>%
+  ggplot(aes(x=Fragmentation, y=avg.coverage, fill=Fragmentation)) +
+  geom_violin(color="black", show.legend = FALSE)+
+  scale_fill_manual(values = c("#ce1256","#a45bba", "#5ab4ad")) +
+  geom_boxplot(width=0.1, show.legend = FALSE)+
+  stat_summary(fun=mean, geom="point", shape=23, size=3, show.legend = FALSE)+
+  theme(axis.title.x = element_blank(), panel.background =  element_blank(), axis.line = element_line())+
+  ylab("Average sequcen coverage")
+
+
+```
+
+Localization probability analysis
+Extract average Andromeda localization probability per peptide per fragmentation 
+
+```{r}
+Fragmentation.avg.loalization <- Fragmentation.overview.avg %>% 
+  group_by(Proteins.x, Modified.sequence.x, Fragmentation, Modifications.x) %>% slice_max(avg.loc.prob) %>%
+  distinct(avg.loc.prob, .keep_all = TRUE) 
+
+#split data for different fragmentation methods
+Localization.HCD <- Fragmentation.avg.loalization[Fragmentation.avg.loalization$Fragmentation == 'HCD',]
+Localization.HCD <- Localization.HCD[grep("R\\(ph\\)", Localization.HCD$Modified.sequence.x),]
+Localization.ETD <- Fragmentation.avg.loalization[Fragmentation.avg.loalization$Fragmentation == 'ETD',]
+Localization.ETD <- Localization.ETD[grep("R\\(ph\\)", Localization.ETD$Modified.sequence.x),]
+Localization.ETHCD <- Fragmentation.avg.loalization[Fragmentation.avg.loalization$Fragmentation == 'ETHCD',]
+Localization.ETHCD <- Localization.ETHCD[grep("R\\(ph\\)", Localization.ETHCD$Modified.sequence.x),]
+
+
+```
+
+Make a histogram giving the number of p-sites with a respective Andromeda localization probability. Take missed peptides into account.
+
+```{r}
+breaks.num <- c(0.4,0.5,0.6,0.7,0.75,0.8,0.85,0.9,0.95,0.99,1)
+all.peptides.theory <- test <- c("Peptide_01", "Peptide_02", "Peptide_03", "Peptide_04", "Peptide_05", "Peptide_06", 
+                                 "Peptide_07", "Peptide_08", "Peptide_09", "Peptide_10", "Peptide_11", "Peptide_12", 
+                                 "Peptide_13", "Peptide_14", "Peptide_15", "Peptide_16", "Peptide_17")
+library(dplyr)
+localization.analysis <- function(df, loc, breaks.num,amino.acid, peptide.type, fragmentation.type){
+  a <- 
+    df %>% pull(loc) %>% hist(breaks = breaks.num)
+  data.a <- as.data.frame(breaks.num)
+  data.a <- cbind.data.frame(data.a[-1,], a$counts)
+  b <- nrow(unique(df[df$Proteins.x %in% all.peptides.theory, "Proteins.x"]))
+  missing.peptides <- c(0, 17-b)
+  data.a<- rbind.data.frame(missing.peptides, data.a )
+  
+  total.number <- sum(data.a[,2])
+  data.a$pc <- data.a[,2]/total.number*100
+  colnames(data.a) <-c("MQ.localization.probability", "count", "pc.peptides")
+  
+  
+  data.a$peptide.pc <- data.a$pc.peptides
+  penu <- nrow(data.a)
+  for(i in 2:penu){
+    data.a$peptide.pc[i] <- {data.a$peptide.pc[i] + data.a$peptide.pc[i-1]}
+    
+  }
+  data.a$AA <- amino.acid
+  
+  data.a$Type <- peptide.type
+  data.a$Fragmentation <- fragmentation.type
+  
+  return(data.a)
+  
+}
+
+data.HCD<- localization.analysis(Localization.HCD, "Localization.prob", breaks.num, "R", "syn", "HCD")
+
+data.ETD<- localization.analysis(Localization.ETD, "Localization.prob", breaks.num, "R", "syn", "ETD")
+data.ETHCD<- localization.analysis(Localization.ETHCD, "Localization.prob", breaks.num, "R", "syn", "ETHCD")
+
+Histogram.data.syn <- rbind.data.frame(data.HCD, data.ETD, data.ETHCD)
+```
+
+Plot localization probability for the three different fragmentation methods
+
+```{r}
+Localization.plot.syn <- 
+
+Histogram.data.syn %>% arrange(Fragmentation) %>%
+  mutate(Fragmentation = factor(Fragmentation, levels=c("ETD", "ETHCD", "HCD"))) %>%
+  mutate(AA = factor(AA, levels = c("R", "HSTY"))) %>%
+  ggplot(aes(x=peptide.pc, y=MQ.localization.probability, color= Fragmentation))+
+  geom_line(aes(linetype=AA), size=1)+
+  scale_color_manual(values=c("ETD" = "#ce1256","ETHCD" = "#a45bba", "HCD" = "#5ab4ad"))+
+  scale_linetype_manual(values=c("solid", "dashed"))+
+  xlab("% of identified syntehtic pArg peptides")+
+  ylab("MaxQuant localization probability")+
+  theme(panel.background = element_blank(), axis.line = element_line(), legend.position = c(0.8, 0.5))
+
+```
+
+Neutral loss analysis for ETD, EThcD and HCD fragmentation as well as endogenous pHRSTY
+For the neutral-loss analysis txt files generated by an in-house script are read in stating whether a MS2 scan contains a phosphoric acid neutral loss or not. In addition to the fragmentation data, also the endogenous data for pHRSTY was used. 
+
+```{r}
+Triplet.R.ETD <- read.delim("Neutral_loss/Triplets_for_R_ETD.txt", 
+                            header = TRUE, stringsAsFactors = FALSE, dec = ".")
+Triplet.R.ETHCD <- read.delim("Neutral_loss/Triplets_for_R_ETHCD.txt", 
+                            header = TRUE, stringsAsFactors = FALSE, dec = ".")
+Triplet.R.HCD <- read.delim("Neutral_loss/Triplets_for_R_HCD.txt", 
+                            header = TRUE, stringsAsFactors = FALSE, dec = ".")
+Triplet.H.exp7 <- read.delim("Neutral_loss/Triplets_for_H_exp7.txt", 
+                             header = TRUE, stringsAsFactors = FALSE, dec = ".")
+Triplet.R.exp7 <- read.delim("Neutral_loss/Triplets_for_R_exp7.txt", 
+                             header = TRUE, stringsAsFactors = FALSE, dec = ".")
+Triplet.S.exp7 <- read.delim("Neutral_loss/Triplets_for_s_exp7.txt", 
+                             header = TRUE, stringsAsFactors = FALSE, dec = ".")
+Triplet.T.exp7 <- read.delim("Neutral_loss/Triplets_for_T_exp7.txt", 
+                             header = TRUE, stringsAsFactors = FALSE, dec = ".")
+Triplet.Y.exp7 <- read.delim("Neutral_loss/Triplets_for_Y_exp7.txt", 
+                             header = TRUE, stringsAsFactors = FALSE, dec = ".")
+
+```
+
+Extract number of spectra containing neutral losses for the three different fragmentation methods
+```{r}
+Neutral_loss <- function(HCD, ETD, ETHCD,
+                         numbers_Arg_name.HCD,numbers_Arg_name.ETD, numbers_Arg_name.ETHCD,  barchart_name){
+  
+  category <- as.factor(c("No loss" , "Single loss", "Double loss", "Triple loss"))
+  #extracting the numbers of scans with no loss, single loss, double loss or triple loss per amino acid
+  
+  HCD.Arg_no_loss <- sum(HCD$X115.98746 != '+'& HCD$X79.966331 != '+' & 
+                           HCD$X97.976896 != '+', na.rm = TRUE)
+  HCD.Arg_single <- sum(HCD$X115.98746 == '+'& HCD$X79.966331 != '+' & 
+                          HCD$X97.976896 != '+' |
+                          HCD$X115.98746 != '+'& HCD$X79.966331 == '+' & 
+                          HCD$X97.976896 != '+' |
+                          HCD$X115.98746 != '+'& HCD$X79.966331 != '+' & 
+                          HCD$X97.976896 == '+', na.rm = TRUE)
+  HCD.Arg_double <- sum (HCD$X115.98746 == '+'& HCD$X79.966331 == '=' & 
+                           HCD$X97.976896 != '+' |
+                           HCD$X115.98746 == '+'& HCD$X79.966331 != '+' & 
+                           HCD$X97.976896 == '+' |
+                           HCD$X115.98746 != '+'& HCD$X79.966331 == '+' & 
+                           HCD$X97.976896 == '+', na.rm = TRUE)
+  HCD.Arg_triple <- sum(HCD$X115.98746 == '+'& HCD$X79.966331 == '+' & 
+                          HCD$X97.976896 == '+', na.rm = TRUE)
+  number.aa <- as.numeric(c(HCD.Arg_no_loss, HCD.Arg_single, HCD.Arg_double, HCD.Arg_triple))
+  Fragmentation <- c('HCD','HCD','HCD', "HCD" )
+  Numbers_Arg.HCD <- data.frame(category, number.aa, Fragmentation)
+  
+  ETD.Arg_no_loss <- sum(ETD$X115.98746 != '+'& ETD$X79.966331 != '+' & 
+                           ETD$X97.976896 != '+', na.rm = TRUE)
+  ETD.Arg_single <- sum(ETD$X115.98746 == '+'& ETD$X79.966331 != '+' & 
+                          ETD$X97.976896 != '+' |
+                          ETD$X115.98746 != '+'& ETD$X79.966331 == '+' & 
+                          ETD$X97.976896 != '+' |
+                          ETD$X115.98746 != '+'& ETD$X79.966331 != '+' & 
+                          ETD$X97.976896 == '+', na.rm = TRUE)
+  ETD.Arg_double <- sum (ETD$X115.98746 == '+'& ETD$X79.966331 == '=' & 
+                           ETD$X97.976896 != '+' |
+                           ETD$X115.98746 == '+'& ETD$X79.966331 != '+' & 
+                           ETD$X97.976896 == '+' |
+                           ETD$X115.98746 != '+'& ETD$X79.966331 == '+' & 
+                           ETD$X97.976896 == '+', na.rm = TRUE)
+  ETD.Arg_triple <- sum(ETD$X115.98746 == '+'& ETD$X79.966331 == '+' & 
+                          ETD$X97.976896 == '+', na.rm = TRUE)
+  number.aa <- as.numeric(c(ETD.Arg_no_loss, ETD.Arg_single, ETD.Arg_double, ETD.Arg_triple))
+  Fragmentation <- c('ETD','ETD','ETD', "ETD" )
+  Numbers_Arg.ETD <- data.frame(category, number.aa, Fragmentation)
+  
+  ETHCD.Arg_no_loss <- sum(ETHCD$X115.98746 != '+'& ETHCD$X79.966331 != '+' & 
+                             ETHCD$X97.976896 != '+', na.rm = TRUE)
+  ETHCD.Arg_single <- sum(ETHCD$X115.98746 == '+'& ETHCD$X79.966331 != '+' & 
+                            ETHCD$X97.976896 != '+' |
+                            ETHCD$X115.98746 != '+'& ETHCD$X79.966331 == '+' & 
+                            ETHCD$X97.976896 != '+' |
+                            ETHCD$X115.98746 != '+'& ETHCD$X79.966331 != '+' & 
+                            ETHCD$X97.976896 == '+', na.rm = TRUE)
+  ETHCD.Arg_double <- sum (ETHCD$X115.98746 == '+'& ETHCD$X79.966331 == '=' & 
+                             ETHCD$X97.976896 != '+' |
+                             ETHCD$X115.98746 == '+'& ETHCD$X79.966331 != '+' & 
+                             ETHCD$X97.976896 == '+' |
+                             ETHCD$X115.98746 != '+'& ETHCD$X79.966331 == '+' & 
+                             ETHCD$X97.976896 == '+', na.rm = TRUE)
+  ETHCD.Arg_triple <- sum(ETHCD$X115.98746 == '+'& ETHCD$X79.966331 == '+' & 
+                            ETHCD$X97.976896 == '+', na.rm = TRUE)
+  number.aa <- as.numeric(c(ETHCD.Arg_no_loss, ETHCD.Arg_single, ETHCD.Arg_double, ETHCD.Arg_triple))
+  Fragmentation <- c('ETHCD','ETHCD','ETHCD', "ETHCD" )
+  Numbers_Arg.ETHCD <- data.frame(category, number.aa, Fragmentation)
+  
+  
+  #combing all 5 data frames into one
+  numbers <- rbind(Numbers_Arg.ETD, Numbers_Arg.ETHCD, Numbers_Arg.HCD)
+  #assign category column as factor and sort in the way it should be displayed in the bar chart
+  numbers$category <- as.factor(numbers$category)
+  numbers$category <- factor(numbers$category , levels = c("Triple loss", "Double loss", "Single loss", "No loss"))
+ 
+  
+  write.csv(Numbers_Arg.HCD, numbers_Arg_name.HCD )
+  write.csv(Numbers_Arg.ETD, numbers_Arg_name.ETD )
+  write.csv(Numbers_Arg.ETHCD, numbers_Arg_name.ETHCD )
+  
+  write.csv(numbers, barchart_name)
+  return(numbers)
+}
+
+
+Syn.NL <- Neutral_loss(Triplet.R.HCD, Triplet.R.ETD, Triplet.R.ETHCD, 
+                       "numbers_pArg_HCD.csv", "numbers_Arg_ETD.csv", "number_Arg_ETHCD.csv","barchart_syn_peptides_NL_fragmentation.csv")
+
+NL.plot <-
+  ggplot(Syn.NL, aes(fill=category, y= number.aa, x= Fragmentation )) +    #uses the catagory to colour the bars
+  geom_bar(stat = 'identity', position = "fill")+    # makes a stacked bar graph in %
+  scale_fill_brewer(palette = "PuRd", direction = -1) +            #colour scheme
+  theme_classic() +                                #white background
+  ylab("% Identified phosphopeptides") +           #changes y-axis lable
+  theme(axis.title.x = element_blank())            #removes x-axis lable
+
+```
+Plot Neutral-loss occurrence for the different fragementation methods
+
+```{r}
+plot(NL.plot)
+```
+
+Extract number of spectra containing neutral losses for the different amino acids pHRSTY from the endogenous data
+
+```{r}
+Neutral_loss.enodgenous <- function(output_Ser, output_Thr, output_Tyr, output_His, output_Arg,
+                                    numbers_Ser_name, numbers_Thr_name, numbers_Tyr_name, numbers_His_name, numbers_Arg_name, barchart_name){
+  
+  category <- as.factor(c("No loss" , "Single loss", "Double loss", "Triple loss"))
+  #extracting the numbers of scans with no loss, single loss, double loss or tripel loss per amino acid
+  Ser_no_loss <- sum(output_Ser$X115.98746 != '+'& output_Ser$X79.966331 != '+' & 
+                       output_Ser$X97.976896 != '+', na.rm = TRUE)
+  Ser_single <- sum(output_Ser$X115.98746 == '+'& output_Ser$X79.966331 != '+' & 
+                      output_Ser$X97.976896 != '+' |
+                      output_Ser$X115.98746 != '+'& output_Ser$X79.966331 == '+' & 
+                      output_Ser$X97.976896 != '+' |
+                      output_Ser$X115.98746 != '+'& output_Ser$X79.966331 != '+' & 
+                      output_Ser$X97.976896 == '+', na.rm = TRUE)
+  Ser_double <- sum (output_Ser$X115.98746 == '+'& output_Ser$X79.966331 == '=' & 
+                       output_Ser$X97.976896 != '+' |
+                       output_Ser$X115.98746 == '+'& output_Ser$X79.966331 != '+' & 
+                       output_Ser$X97.976896 == '+' |
+                       output_Ser$X115.98746 != '+'& output_Ser$X79.966331 == '+' & 
+                       output_Ser$X97.976896 == '+', na.rm = TRUE)
+  Ser_triple <- sum(output_Ser$X115.98746 == '+'& output_Ser$X79.966331 == '+' & 
+                      output_Ser$X97.976896 == '+', na.rm = TRUE)
+  number.aa <- as.numeric(c(Ser_no_loss, Ser_single, Ser_double, Ser_triple))       #combining the numbers of no loss, single, double or triple loss in in one vector
+  aa <- c("pSer","pSer", "pSer", "pSer")                                  # generating a vector to asign to every loss of the specific amino acid
+  Numbers_Ser <- data.frame(category, number.aa, aa)                      #building a dataframe with the category, numbers and type of amino acid
+  Thr_no_loss <- sum(output_Thr$X115.98746 != '+'& output_Thr$X79.966331 != '+' & 
+                       output_Thr$X97.976896 != '+', na.rm = TRUE)
+  Thr_single <- sum(output_Thr$X115.98746 == '+'& output_Thr$X79.966331 != '+' & 
+                      output_Thr$X97.976896 != '+' |
+                      output_Thr$X115.98746 != '+'& output_Thr$X79.966331 == '+' & 
+                      output_Thr$X97.976896 != '+' |
+                      output_Thr$X115.98746 != '+'& output_Thr$X79.966331 != '+' & 
+                      output_Thr$X97.976896 == '+', na.rm = TRUE)
+  Thr_double <- sum (output_Thr$X115.98746 == '+'& output_Thr$X79.966331 == '=' & 
+                       output_Thr$X97.976896 != '+' |
+                       output_Thr$X115.98746 == '+'& output_Thr$X79.966331 != '+' & 
+                       output_Thr$X97.976896 == '+' |
+                       output_Thr$X115.98746 != '+'& output_Thr$X79.966331 == '+' & 
+                       output_Thr$X97.976896 == '+', na.rm = TRUE)
+  Thr_triple <- sum(output_Thr$X115.98746 == '+'& output_Thr$X79.966331 == '+' & 
+                      output_Thr$X97.976896 == '+', na.rm = TRUE)
+  number.aa <- as.numeric(c(Thr_no_loss, Thr_single, Thr_double, Thr_triple))
+  aa <- c("pThr", "pThr", "pThr", "pThr")
+  Numbers_Thr <- data.frame(category, number.aa, aa)
+  Tyr_no_loss <- sum(output_Tyr$X115.98746 != '+'& output_Tyr$X79.966331 != '+' & 
+                       output_Tyr$X97.976896 != '+', na.rm = TRUE)
+  Tyr_single <- sum(output_Tyr$X115.98746 == '+'& output_Tyr$X79.966331 != '+' & 
+                      output_Tyr$X97.976896 != '+' |
+                      output_Tyr$X115.98746 != '+'& output_Tyr$X79.966331 == '+' & 
+                      output_Tyr$X97.976896 != '+' |
+                      output_Tyr$X115.98746 != '+'& output_Tyr$X79.966331 != '+' & 
+                      output_Tyr$X97.976896 == '+', na.rm = TRUE)
+  Tyr_double <- sum (output_Tyr$X115.98746 == '+'& output_Tyr$X79.966331 == '=' & 
+                       output_Tyr$X97.976896 != '+' |
+                       output_Tyr$X115.98746 == '+'& output_Tyr$X79.966331 != '+' & 
+                       output_Tyr$X97.976896 == '+' |
+                       output_Tyr$X115.98746 != '+'& output_Tyr$X79.966331 == '+' & 
+                       output_Tyr$X97.976896 == '+', na.rm = TRUE)
+  Tyr_triple <- sum(output_Tyr$X115.98746 == '+'& output_Tyr$X79.966331 == '+' & 
+                      output_Tyr$X97.976896 == '+', na.rm = TRUE)
+  number.aa <- as.numeric(c(Tyr_no_loss, Tyr_single, Tyr_double, Tyr_triple))
+  aa <- c("pTyr","pTyr", "pTyr", "pTyr")
+  Numbers_Tyr <- data.frame(category, number.aa, aa)
+  His_no_loss <- sum(output_His$X115.98746 != '+'& output_His$X79.966331 != '+' & 
+                       output_His$X97.976896 != '+', na.rm = TRUE)
+  His_single <- sum(output_His$X115.98746 == '+'& output_His$X79.966331 != '+' & 
+                      output_His$X97.976896 != '+' |
+                      output_His$X115.98746 != '+'& output_His$X79.966331 == '+' & 
+                      output_His$X97.976896 != '+' |
+                      output_His$X115.98746 != '+'& output_His$X79.966331 != '+' & 
+                      output_His$X97.976896 == '+', na.rm = TRUE)
+  His_double <- sum (output_His$X115.98746 == '+'& output_His$X79.966331 == '=' & 
+                       output_His$X97.976896 != '+' |
+                       output_His$X115.98746 == '+'& output_His$X79.966331 != '+' & 
+                       output_His$X97.976896 == '+' |
+                       output_His$X115.98746 != '+'& output_His$X79.966331 == '+' & 
+                       output_His$X97.976896 == '+', na.rm = TRUE)
+  His_triple <- sum(output_His$X115.98746 == '+'& output_His$X79.966331 == '+' & 
+                      output_His$X97.976896 == '+', na.rm = TRUE)
+  number.aa <- as.numeric(c(His_no_loss, His_single, His_double, His_triple))
+  aa <- c('pHis','pHis','pHis', "pHis")
+  Numbers_His <- data.frame(category,number.aa, aa)
+  Arg_no_loss <- sum(output_Arg$X115.98746 != '+'& output_Arg$X79.966331 != '+' & 
+                       output_Arg$X97.976896 != '+', na.rm = TRUE)
+  Arg_single <- sum(output_Arg$X115.98746 == '+'& output_Arg$X79.966331 != '+' & 
+                      output_Arg$X97.976896 != '+' |
+                      output_Arg$X115.98746 != '+'& output_Arg$X79.966331 == '+' & 
+                      output_Arg$X97.976896 != '+' |
+                      output_Arg$X115.98746 != '+'& output_Arg$X79.966331 != '+' & 
+                      output_Arg$X97.976896 == '+', na.rm = TRUE)
+  Arg_double <- sum (output_Arg$X115.98746 == '+'& output_Arg$X79.966331 == '=' & 
+                       output_Arg$X97.976896 != '+' |
+                       output_Arg$X115.98746 == '+'& output_Arg$X79.966331 != '+' & 
+                       output_Arg$X97.976896 == '+' |
+                       output_Arg$X115.98746 != '+'& output_Arg$X79.966331 == '+' & 
+                       output_Arg$X97.976896 == '+', na.rm = TRUE)
+  Arg_triple <- sum(output_Arg$X115.98746 == '+'& output_Arg$X79.966331 == '+' & 
+                      output_Arg$X97.976896 == '+', na.rm = TRUE)
+  number.aa <- as.numeric(c(Arg_no_loss, Arg_single, Arg_double, Arg_triple))
+  aa <- c('pArg','pArg','pArg', "pArg" )
+  Numbers_Arg <- data.frame(category, number.aa, aa)
+  #combing all 5 dataframes into one
+  numbers <- rbind(Numbers_Ser, Numbers_Thr, Numbers_Tyr, Numbers_His, Numbers_Arg)
+  #assign category column as factor and sort in the way it should be displayed in the bar chart
+  numbers$category <- as.factor(numbers$category)
+  numbers$category <- factor(numbers$category , levels = c("Triple loss", "Double loss", "Single loss", "No loss"))
+ 
+  #writes all tables
+  write.csv(Numbers_Ser, numbers_Ser_name )
+  write.csv(Numbers_Thr, numbers_Thr_name )
+  write.csv(Numbers_Tyr, numbers_Tyr_name)
+  write.csv(Numbers_His, numbers_His_name)
+  write.csv(Numbers_Arg, numbers_Arg_name )
+  write.csv(numbers, barchart_name)
+ return(numbers)
+}
+
+
+Syn.NL.endo <- Neutral_loss.enodgenous(Triplet.S.exp7, Triplet.T.exp7, Triplet.Y.exp7, Triplet.H.exp7, Triplet.R.exp7,
+                                       "numbers_Ser_endo_peptides.csv","numbers_Thr_endo_peptides.csv", "numbers_Tyr_endo_peptides.csv",
+                                       "numbers_His_endo_peptides.csv", "numbers_Arg_endo_peptides.csv","barchart_endo_peptides_NL.csv")
+
+NL.endo.plot <-
+  ggplot(Syn.NL.endo, aes(fill=category, y= number.aa, x= aa )) +    #uses the catagory to colour the bars
+  geom_bar(stat = 'identity', position = "fill")+    # makes a stacked bar graph in %
+  scale_fill_brewer(palette = "PuRd", direction = -1) +            #colour scheme
+  theme_classic() +                                #white background
+  ylab("% Identified phosphopeptides") +           #changes y-axis lable
+  theme(axis.title.x = element_blank())            #removes x-axis lable
+
+```
+
+Plot Neutral-loss occurrence for the amino acids methods 
+
+```{r}
+plot(NL.endo.plot)
+```
+
+## Make plot for the manuscript
+
+
+
+```{r, echo=FALSE}
+ggarrange(ggarrange(avg.coverage.plot,avg.score.plot , labels = c("a)","b)"), ncol=2),
+          ggarrange(Localization.plot.syn, NL.plot, labels = c("c)", "d)"), ncol = 2),
+          ggarrange(NL.endo.plot, labels = c("e)", "d)"), ncol = 2),
+          nrow = 3)
+```
+

@@ -1,0 +1,261 @@
+---
+title: "pArg_organism_comparison"
+author: "Nadine Prust"
+date: "6/25/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Comaprison of pArg occurance in S. aureus, E.coli and B. subtilis
+
+All necessary data is deposited on Pride and can be downloaded. The used files for this script can be found in the MQ_output_txt.zip file. Add the MQ_output_txt folder then to your project folder to access the required data.
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+```
+
+Read Phospho (RHSTY)Sites.txt from MaxQuant (v1.6.3.4) from E.coli, B. subtilis and S.aureus Sdr mutants
+
+```{r}
+pRHSTY.Ecoli <- read.delim("MQ_output_txt/Endogenous_data/Ecoli/Phospho (RHSTY)Sites_Ecoli.txt", header = TRUE,
+                           stringsAsFactors = FALSE, dec = ".")
+pRHSTY.Bsub <- read.delim("MQ_output_txt/Endogenous_data/Bsubtilis/Phospho (RHSTY)Sites_sub.txt", header = TRUE,
+                           stringsAsFactors = FALSE, dec = ".")
+phospho_SdrE <- read.delim("MQ_output_txt/Endogenous_data/SdrE/Phospho (RHSTY)Sites_SdrE.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+
+```
+
+
+```{r}
+pRHSTY.Ecoli <- pRHSTY.Ecoli[pRHSTY.Ecoli$Potential.contaminant != "+",]
+pRHSTY.Ecoli <- pRHSTY.Ecoli[pRHSTY.Ecoli$Reverse != "+", ]
+classI.Ecoli <- pRHSTY.Ecoli[pRHSTY.Ecoli$Localization.prob >= 0.75,]
+
+pRHSTY.Bsub <- pRHSTY.Bsub[pRHSTY.Bsub$Potential.contaminant != "+",]
+pRHSTY.Bsub <- pRHSTY.Bsub[pRHSTY.Bsub$Reverse != "+", ]
+classI.Bsub <- pRHSTY.Bsub[pRHSTY.Bsub$Localization.prob >= 0.75,]
+
+phospho.SdrE <- phospho.SdrE[phospho.SdrE$Reverse != "+",]
+phospho.SdrE <- phospho.SdrE[phospho.SdrE$Potential.contaminant != "+",]
+
+class1.SdrE <- phospho.SdrE[phospho.SdrE$Localization.prob >=0.75,]
+```
+
+Calculate distribution of p-sites for the diffrent organisms
+
+```{r}
+##Ecoli
+
+#count number of pSTYH w/o localization cutoff
+Ecoli.distribution <- data.frame(
+  category=c("pS", "pT", "pY", "pH", "pR"),
+  count=c(nrow(pRHSTY.Ecoli[pRHSTY.Ecoli$Amino.acid == "S",]), nrow(pRHSTY.Ecoli[pRHSTY.Ecoli$Amino.acid == "T",]), 
+          nrow(pRHSTY.Ecoli[pRHSTY.Ecoli$Amino.acid == "Y",]), nrow(pRHSTY.Ecoli[pRHSTY.Ecoli$Amino.acid == "H",]),
+          nrow(pRHSTY.Ecoli[pRHSTY.Ecoli$Amino.acid == "R",]))
+)
+#set leves on category
+Ecoli.distribution$category.ordered <- factor(Ecoli.distribution$category, levels = Ecoli.distribution$category)
+
+# calculate percentages
+
+Ecoli.distribution$fraction <- Ecoli.distribution$count / sum(Ecoli.distribution$count)
+
+# Calculate the cumulative percentages (top of each rectangle)
+Ecoli.distribution$ymax <- cumsum(Ecoli.distribution$fraction)
+
+# Compute the bottom of each rectangle
+Ecoli.distribution$ymin <- c(0, head(Ecoli.distribution$ymax, n=-1))
+
+# Compute label position
+Ecoli.distribution$labelPosition <- (Ecoli.distribution$ymax + Ecoli.distribution$ymin) / 2
+#compute column with % wih 1 decimal place
+Ecoli.distribution$pc <- round(Ecoli.distribution$fraction*100, digits = 1)
+
+#Compute a good label
+Ecoli.distribution$label <- paste0(Ecoli.distribution$category, "\n ", Ecoli.distribution$count, "\n ", Ecoli.distribution$pc, "%")
+
+Ecoli.distribution$org <- "Ecoli"
+Ecoli.distribution$type <- "all"
+####Class I
+ClassI.Ecoli.distribution <- data.frame(
+  category=c("pS", "pT", "pY", "pH", "pR"),
+  count=c(nrow(classI.Ecoli[classI.Ecoli$Amino.acid == "S",]), nrow(classI.Ecoli[classI.Ecoli$Amino.acid == "T",]), 
+          nrow(classI.Ecoli[classI.Ecoli$Amino.acid == "Y",]), nrow(classI.Ecoli[classI.Ecoli$Amino.acid == "H",]),
+          nrow(classI.Ecoli[classI.Ecoli$Amino.acid == "R",]))
+)
+#set leves on category
+ClassI.Ecoli.distribution$category.ordered <- factor(ClassI.Ecoli.distribution$category, levels = ClassI.Ecoli.distribution$category)
+
+# calculate percentages
+
+ClassI.Ecoli.distribution$fraction <- ClassI.Ecoli.distribution$count / sum(ClassI.Ecoli.distribution$count)
+
+# Calculate the cumulative percentages (top of each rectangle)
+ClassI.Ecoli.distribution$ymax <- cumsum(ClassI.Ecoli.distribution$fraction)
+
+# Compute the bottom of each rectangle
+ClassI.Ecoli.distribution$ymin <- c(0, head(ClassI.Ecoli.distribution$ymax, n=-1))
+
+# Compute label position
+ClassI.Ecoli.distribution$labelPosition <- (ClassI.Ecoli.distribution$ymax + ClassI.Ecoli.distribution$ymin) / 2
+#compute column with % wih 1 decimal place
+ClassI.Ecoli.distribution$pc <- round(ClassI.Ecoli.distribution$fraction*100, digits = 1)
+
+#Compute a good label
+ClassI.Ecoli.distribution$label <- paste0(ClassI.Ecoli.distribution$category, "\n ", ClassI.Ecoli.distribution$count, "\n ", ClassI.Ecoli.distribution$pc, "%")
+
+#organism
+
+ClassI.Ecoli.distribution$org <- "Ecoli"
+ClassI.Ecoli.distribution$type <- "classI"
+
+##Bsub
+Bsub.distribution <- data.frame(
+  category=c("pS", "pT", "pY", "pH", "pR"),
+  count=c(nrow(pRHSTY.Bsub[pRHSTY.Bsub$Amino.acid == "S",]), nrow(pRHSTY.Bsub[pRHSTY.Bsub$Amino.acid == "T",]), 
+          nrow(pRHSTY.Bsub[pRHSTY.Bsub$Amino.acid == "Y",]), nrow(pRHSTY.Bsub[pRHSTY.Bsub$Amino.acid == "H",]),
+          nrow(pRHSTY.Bsub[pRHSTY.Bsub$Amino.acid == "R",]))
+)
+#set leves on category
+Bsub.distribution$category.ordered <- factor(Bsub.distribution$category, levels = Bsub.distribution$category)
+
+# calculate percentages
+
+Bsub.distribution$fraction <- Bsub.distribution$count / sum(Bsub.distribution$count)
+
+# Calculate the cumulative percentages (top of each rectangle)
+Bsub.distribution$ymax <- cumsum(Bsub.distribution$fraction)
+
+# Compute the bottom of each rectangle
+Bsub.distribution$ymin <- c(0, head(Bsub.distribution$ymax, n=-1))
+
+# Compute label position
+Bsub.distribution$labelPosition <- (Bsub.distribution$ymax + Bsub.distribution$ymin) / 2
+#compute column with % wih 1 decimal place
+Bsub.distribution$pc <- round(Bsub.distribution$fraction*100, digits = 1)
+
+#Compute a good label
+Bsub.distribution$label <- paste0(Bsub.distribution$category, "\n ", Bsub.distribution$count, "\n ", Bsub.distribution$pc, "%")
+
+Bsub.distribution$org <- "Bsub"
+Bsub.distribution$type <- "all"
+###class I
+
+ClassI.Bsub.distribution <- data.frame(
+category=c("pS", "pT", "pY", "pH", "pR"),
+count=c(nrow(classI.Bsub[classI.Bsub$Amino.acid == "S",]), nrow(classI.Bsub[classI.Bsub$Amino.acid == "T",]), 
+        nrow(classI.Bsub[classI.Bsub$Amino.acid == "Y",]), nrow(classI.Bsub[classI.Bsub$Amino.acid == "H",]),
+        nrow(classI.Bsub[classI.Bsub$Amino.acid == "R",]))
+)
+#set leves on category
+ClassI.Bsub.distribution$category.ordered <- factor(ClassI.Bsub.distribution$category, levels = ClassI.Bsub.distribution$category)
+
+# calculate percentages
+
+ClassI.Bsub.distribution$fraction <- ClassI.Bsub.distribution$count / sum(ClassI.Bsub.distribution$count)
+
+# Calculate the cumulative percentages (top of each rectangle)
+ClassI.Bsub.distribution$ymax <- cumsum(ClassI.Bsub.distribution$fraction)
+
+# Compute the bottom of each rectangle
+ClassI.Bsub.distribution$ymin <- c(0, head(ClassI.Bsub.distribution$ymax, n=-1))
+
+# Compute label position
+ClassI.Bsub.distribution$labelPosition <- (ClassI.Bsub.distribution$ymax + ClassI.Bsub.distribution$ymin) / 2
+#compute column with % wih 1 decimal place
+ClassI.Bsub.distribution$pc <- round(ClassI.Bsub.distribution$fraction*100, digits = 1)
+
+#Compute a good label
+ClassI.Bsub.distribution$label <- paste0(ClassI.Bsub.distribution$category, "\n ", ClassI.Bsub.distribution$count, "\n ", ClassI.Bsub.distribution$pc, "%")
+
+ClassI.Bsub.distribution$org <- "Bsub"
+ClassI.Bsub.distribution$type <- "classI"
+
+##S.aureus SdrE
+
+SdrE.distribution <- data.frame(
+  category=c("pS", "pT", "pY", "pH", "pR"),
+  count=c(nrow(phospho.SdrE[phospho.SdrE$Amino.acid == "S",]), nrow(phospho.SdrE[phospho.SdrE$Amino.acid == "T",]), 
+          nrow(phospho.SdrE[phospho.SdrE$Amino.acid == "Y",]), nrow(phospho.SdrE[phospho.SdrE$Amino.acid == "H",]),
+          nrow(phospho.SdrE[phospho.SdrE$Amino.acid == "R",]))
+)
+#set leves on category
+SdrE.distribution$category.ordered <- factor(SdrE.distribution$category, levels = SdrE.distribution$category)
+
+# calculate percentages
+
+SdrE.distribution$fraction <- SdrE.distribution$count / sum(SdrE.distribution$count)
+
+
+# Calculate the cumulative percentages (top of each rectangle)
+SdrE.distribution$ymax <- cumsum(SdrE.distribution$fraction)
+
+# Compute the bottom of each rectangle
+SdrE.distribution$ymin <- c(0, head(SdrE.distribution$ymax, n=-1))
+# Compute label position
+SdrE.distribution$labelPosition <- (SdrE.distribution$ymax + SdrE.distribution$ymin) / 2
+
+#compute column with % wih 1 decimal place
+SdrE.distribution$pc <- round(SdrE.distribution$fraction*100, digits = 1)
+
+#Compute a good label
+SdrE.distribution$label <- paste0(SdrE.distribution$category, "\n ", SdrE.distribution$count, "\n ", SdrE.distribution$pc, "%")
+SdrE.distribution$org <- "Saureus"
+SdrE.distribution$type <- "all"
+
+
+###classI
+SdrE.class1.distribution <- data.frame(
+  category=c("pS", "pT", "pY", "pH", "pR"),
+  count=c(nrow(class1.SdrE[class1.SdrE$Amino.acid == "S",]), nrow(class1.SdrE[class1.SdrE$Amino.acid == "T",]), 
+          nrow(class1.SdrE[class1.SdrE$Amino.acid == "Y",]), nrow(class1.SdrE[class1.SdrE$Amino.acid == "H",]),
+          nrow(class1.SdrE[class1.SdrE$Amino.acid == "R",]))
+)
+#set leves on category
+SdrE.class1.distribution$category.ordered <- factor(SdrE.class1.distribution$category, levels = SdrE.class1.distribution$category)
+
+
+
+# calculate percentages
+
+SdrE.class1.distribution$fraction <- SdrE.class1.distribution$count / sum(SdrE.class1.distribution$count)
+
+
+# Calculate the cumulative percentages (top of each rectangle)
+SdrE.class1.distribution$ymax <- cumsum(SdrE.class1.distribution$fraction)
+
+# Compute the bottom of each rectangle
+SdrE.class1.distribution$ymin <- c(0, head(SdrE.class1.distribution$ymax, n=-1))
+# Compute label position
+SdrE.class1.distribution$labelPosition <- (SdrE.class1.distribution$ymax + SdrE.class1.distribution$ymin) / 2
+
+#compute column with % wih 1 decimal place
+SdrE.class1.distribution$pc <- round(SdrE.class1.distribution$fraction*100, digits = 1)
+
+#Compute a good label
+SdrE.class1.distribution$label <- paste0(SdrE.class1.distribution$category, "\n ", SdrE.class1.distribution$count, "\n ", SdrE.class1.distribution$pc, "%")
+SdrE.class1.distribution$org <- "Saureus"
+SdrE.class1.distribution$type <- "classI"
+```
+
+Plot percentage of pArg sites for the thre different organisms
+
+```{r}
+
+comparison <- rbind.data.frame(SdrE.distribution, Ecoli.distribution, Bsub.distribution,
+                               SdrE.class1.distribution, ClassI.Ecoli.distribution, ClassI.Bsub.distribution)
+pArg.comparison <- comparison[comparison$category == "pR",]
+
+pArg.comparison %>% 
+  ggplot(aes(x=org, y=pc, group=org, fill=org))+
+  geom_bar(stat = "identity", position = position_dodge2())+
+  scale_fill_brewer(palette = "PuRd")+
+  theme_classic()+
+  facet_wrap(~type)+
+  ylab("pArg sites [%]")
+```

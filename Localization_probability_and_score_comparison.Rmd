@@ -1,0 +1,290 @@
+---
+title: Andromeda localization probability and Andromeda score comaprison for pArg and pHSTY sites
+  peptides
+author: "Nadine Prust"
+date: "6/25/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Comparison of Andromeda localization probability and Andromeda score for endogenous peptides that were either exclusively identified being phosphorylated on arginine that were also identified  to be phosphorylated on H,S,T, or Y. and pArg peptides 
+
+All necessary data is deposited on Pride and can be downloaded. The used files for this script can be found in the MQ_output_txt.zip file. Add the MQ_output_txt folder then to your project folder to access the required data.
+
+```{r}
+ library(stringr)
+library(reshape2)
+```
+
+Read Phospho (RHSTY).txt from combined MaxQuant (v1.6.3.4) search and read uniprot list containing protein names
+
+```{r}
+
+phospho_RHSTY <- read.delim("MQ_output_txt/Endogenous_data/LFQ_Saureus/txt/Phospho (RHSTY)Sites_exp7.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+uniprotname <- read.delim("MQ_output_txt/Endogenous_data/LFQ_Saureus/txt/uniprot_list_pRHSTY.txt", header = TRUE, stringsAsFactors = FALSE)
+```
+
+Extract important columns and filter data
+
+```{r}
+pRHSTY.aureus<- phospho_RHSTY[, c("Protein","Amino.acid", "Positions.within.proteins", "Number.of.Phospho..RHSTY.", "Phospho..RHSTY..Probabilities",
+                                        "Intensity.SdrE_1", "Intensity.SdrE_2", "Intensity.SdrE_3", "Intensity.SdrE_4",
+                                        "Intensity.Stk1_1", "Intensity.Stk1_2", "Intensity.Stk1_3", "Intensity.Stk1_4",
+                                        "Intensity.Stp1_1", "Intensity.Stp1_2", "Intensity.Stp1_3", "Intensity.Stp1_4", "Delta.score", "Score",
+                                        "Localization.prob", "Sequence.window",
+                                        "Reverse", "Potential.contaminant",
+                                        "Localization.prob.SdrE_1","Localization.prob.SdrE_2", "Localization.prob.SdrE_3", "Localization.prob.SdrE_4", 
+                                        "Localization.prob.Stk1_1", "Localization.prob.Stk1_2", "Localization.prob.Stk1_3", "Localization.prob.Stk1_4",
+                                        "Localization.prob.Stp1_1", "Localization.prob.Stp1_2", "Localization.prob.Stp1_3", "Localization.prob.Stp1_4",
+                                        "Best.localization.evidence.ID", "Best.localization.raw.file", "Best.localization.scan.number"
+                                        
+)]
+# removing reversed and contaminants
+
+
+pRHSTY.aureus<- pRHSTY.aureus[pRHSTY.aureus$Reverse != "+",]
+pRHSTY.aureus <- pRHSTY.aureus[pRHSTY.aureus$Potential.contaminant != "+",]
+pRHSTY.aureus$ID <- paste(pRHSTY.aureus$Protein, pRHSTY.aureus$Amino.acid, pRHSTY.aureus$Positions.within.proteins,
+                        sep = ",")
+
+pRHSTY.aureus$Sequence <- gsub("\\(\\d*\\.?\\d*\\)","", pRHSTY.exp7$Phospho..RHSTY..Probabilities)
+pRHSTY.aureus <- pRHSTY.aureus[pRHSTY.aureus$Number.of.Phospho..RHSTY. != "",]
+
+```
+
+Perform log2 transformation and median normalization of the intensities
+
+```{r}
+pRHSTY.aureus[,grep("Intensity.*", colnames(pRHSTY.aureus))] <- apply(pRHSTY.aureus[,grep("Intensity.*", colnames(pRHSTY.aureus))], 2, FUN=log2 )
+# change -Inf to NA
+# take all columns containing LFQ in their header
+intensitycolumns <- grep("Intensity.*", colnames(pRHSTY.aureus))
+# apply log transformation on all columns containing LFQ in their column name
+pRHSTY.aureus[,intensitycolumns] <- apply(pRHSTY.aureus[, intensitycolumns], 2, function(x) { x[is.infinite(x)] <- NA; x})  
+
+### median normalization - calculate median per sample (on column) and substract it from each row
+
+pRHSTY.aureus[,intensitycolumns] <- apply(pRHSTY.aureus[, intensitycolumns], 2, function(x) {x- median(x, na.rm = TRUE)}) 
+
+### calculate avg
+
+pRHSTY.aureus$SdrE <- rowMeans(pRHSTY.aureus[,grep("Intensity.SdrE", colnames(pRHSTY.aureus))], na.rm = TRUE)
+pRHSTY.aureus$Stk1 <- rowMeans(pRHSTY.aureus[,grep("Intensity.Stk1", colnames(pRHSTY.aureus))], na.rm = TRUE)
+pRHSTY.aureus$Stp1 <- rowMeans(pRHSTY.aureus[,grep("Intensity.Stp1", colnames(pRHSTY.aureus))], na.rm = TRUE)
+
+###count NA per replicate
+
+pRHSTY.aureus$NA_SdrE <- apply(pRHSTY.aureus[,grep("Intensity.SdrE", colnames(pRHSTY.aureus))],1,function(x) sum(is.na(x)))
+
+pRHSTY.aureus$NA_Stk1 <- apply(pRHSTY.aureus[,grep("Intensity.Stk1", colnames(pRHSTY.aureus))],1,function(x) sum(is.na(x)))
+
+pRHSTY.aureus$NA_Stp1 <- apply(pRHSTY.aureus[,grep("Intensity.Stp1", colnames(pRHSTY.aureus))],1,function(x) sum(is.na(x)))
+
+```
+
+Filter data for valid values: 3x in at least one group 
+
+```{r}
+pRHSTY.aureus.filtered <- pRHSTY.aureus[(pRHSTY.aureus$NA_SdrE <=1 | pRHSTY.aureus$NA_Stk1 <=1 | pRHSTY.aureus$NA_Stp1),]
+
+```
+
+Determine sequence without missed cleavages to take higher amount of missed cleaveged due to pArg into account. 
+
+```{r}
+pArg.aureus <- pRHSTY.aureus.filtered[pRHSTY.aureus.filtered$Amino.acid == "R",]
+pArg.aureus$missed.cleavages <- str_count(pArg.aureus$Sequence, "K|R")-1
+pArg.aureus$before.missed.cleavage <- str_extract(pArg.aureus$Sequence, "^(.*?R|K)")
+pArg.aureus$after.missed.cleavage <- str_extract(pArg.aureus$Sequence, "R.*|K.*")
+pArg.aureus.short <- pArg.aureus %>% select(Protein, Amino.acid, Positions.within.proteins, ID, Number.of.Phospho..RHSTY., Localization.prob, 
+                                            Best.localization.evidence.ID, Best.localization.raw.file, Best.localization.scan.number, Sequence.window,
+                                            Sequence, before.missed.cleavage, after.missed.cleavage)
+
+
+
+pHSTY.aureus <- pRHSTY.aureus.filtered[pRHSTY.aureus.filtered$Amino.acid != "R",]
+pHSTY.aureus$missed.cleavages <- str_count(pHSTY.aureus$Sequence, "K|R")-1
+pHSTY.aureus$before.missed.cleavage <- pHSTY.aureus$Sequence
+pHSTY.aureus$after.missed.cleavage <- pHSTY.aureus$Sequence
+pHSTY.aureus.short <- pHSTY.aureus %>% select(Protein, Amino.acid, Positions.within.proteins,ID, Number.of.Phospho..RHSTY., Localization.prob, 
+                                              Best.localization.evidence.ID, Best.localization.raw.file, Best.localization.scan.number, Sequence.window,
+                                              Sequence, before.missed.cleavage, after.missed.cleavage)
+
+sequence.comparison <- inner_join(pArg.aureus.short, pHSTY.aureus.short, by="Sequence")
+sequence.comparison <- sequence.comparison[,-23]
+
+sequence.comparison.before.missed.cleavage <- inner_join(pArg.aureus.short, pHSTY.aureus.short, by="before.missed.cleavage")
+sequence.comparison.before.missed.cleavage <- sequence.comparison.before.missed.cleavage[,-23]
+sequence.comparison.after.missed.cleavage <- inner_join(pArg.aureus.short, pHSTY.aureus.short, by="after.missed.cleavage")
+sequence.comparison.after.missed.cleavage <- sequence.comparison.after.missed.cleavage[,-23]
+names.comparison <- colnames(sequence.comparison.before.missed.cleavage)
+colnames(sequence.comparison) <- names.comparison
+colnames(sequence.comparison.after.missed.cleavage) <- names.comparison
+
+combined <- rbind.data.frame(sequence.comparison, sequence.comparison.before.missed.cleavage, sequence.comparison.after.missed.cleavage)
+combined.unique <- combined[which(!duplicated(combined$ID.x)),]
+combined.doubly.phosphorylated <- combined[combined$Number.of.Phospho..RHSTY..x >= 2,]
+
+identifier <- c(combined$ID.x, combined$ID.y)
+test2 <-as.data.frame(gsub(",.*", "", identifier$`combined$ID.x`))
+
+multiple.ppeptide <- pRHSTY.aureus[pRHSTY.aureus$ID %in% identifier,]
+multiple.ppeptide$ID.aa <- ifelse(multiple.ppeptide$Amino.acid == "R", "R", "HSTY")
+
+pRHSTY.aureus.filtered$multiple <- ifelse(pRHSTY.aureus.filtered$ID %in% identifier, "Yes", "NO")
+pRHSTY.aureus.filtered$ID.aa <- ifelse(pRHSTY.aureus.filtered$Amino.acid == "R", "R", "HSTY")
+
+#filter for localization prob of >= 0.75
+
+classI.combined <- combined[combined$Localization.prob.x >= 0.75,]
+classI.identifier <- c(classI.combined$ID.x, classI.combined$ID.y)
+classI.multiple.ppeptides <- pRHSTY.aureus[pRHSTY.aureus$ID %in% classI.identifier,]
+
+both.classI.combined <- combined[combined$Localization.prob.x >= 0.75 & combined$Localization.prob.y >= 0.75,]
+both.classI.combined <- both.classI.combined[which(!duplicated(both.classI.combined$ID.x)),]
+```
+
+Plot Andromeda Score for pArg and pHSTY p-sites
+
+```{r}
+
+Score.plot <-
+pRHSTY.aureus.filtered %>%
+  mutate(ID.aa = factor(ID.aa, levels = c("HSTY" ,"R"))) %>%
+  mutate(multiple = factor(multiple, levels = c("Yes" ,"NO"))) %>%
+ggplot(aes(x=ID.aa, y=Score, fill=ID.aa)) +
+  geom_violin(color="black", show.legend = FALSE)+
+  scale_fill_manual(values = c("#01665e","#762a83")) +
+  geom_boxplot(width=0.1, show.legend = FALSE)+
+  stat_summary(fun=mean, geom="point", shape=23, size=3, show.legend = FALSE)+
+  theme(axis.title.x = element_blank(), panel.background =  element_blank(), axis.line = element_line())+
+  ylab("Andromeda score")+
+  facet_wrap(~multiple)
+```
+
+Determine the Andromeda localization probability distribution of pArg and pHSTY peptides
+
+```{r}
+breaks.num <- c(0.4,0.5,0.6,0.7,0.75,0.8,0.85,0.9,0.95,0.99,1)
+
+
+localization.analysis <- function(df, loc, breaks.num,amino.acid1, amino.acid2, multiple1, multiple2){
+  a <- df[df$ID.aa == amino.acid1 & df$multiple == multiple1,]
+  a <- 
+    a %>% pull(loc) %>% hist(breaks = breaks.num)
+  data.a <- as.data.frame(breaks.num)
+  data.a <- cbind.data.frame(data.a[-1,], a$counts)
+  
+  total.number <- sum(data.a[,2])
+  data.a$pc <- data.a[,2]/total.number*100
+  colnames(data.a) <-c("MQ.localization.probability", "count", "pc.peptides")
+  
+  
+  data.a$peptide.pc <- data.a$pc.peptides
+  penu <- nrow(data.a)
+  for(i in 2:penu){
+    data.a$peptide.pc[i] <- {data.a$peptide.pc[i] + data.a$peptide.pc[i-1]}
+    
+  }
+  data.a$AA <- amino.acid1
+  data.a$Multiple.ID <- multiple1
+  
+  b <- df[df$ID.aa == amino.acid1 & df$multiple == multiple2,]
+  b <- 
+    b %>% pull(loc) %>% hist(breaks = breaks.num)
+  data.b <- as.data.frame(breaks.num)
+  data.b <- cbind.data.frame(data.b[-1,], b$counts)
+  
+  total.number <- sum(data.b[,2])
+  data.b$pc <- data.b[,2]/total.number*100
+  colnames(data.b) <-c("MQ.localization.probability", "count", "pc.peptides")
+  
+  
+  data.b$peptide.pc <- data.b$pc.peptides
+  penu <- nrow(data.b)
+  for(i in 2:penu){
+    data.b$peptide.pc[i] <- {data.b$peptide.pc[i] + data.b$peptide.pc[i-1]}
+    
+  }
+  data.b$AA <- amino.acid1
+  data.b$Multiple.ID <- multiple2
+  
+  
+  c <- df[df$ID.aa == amino.acid2 & df$multiple == multiple1,]
+  c <- 
+    c %>% pull(loc) %>% hist(breaks = breaks.num)
+  data.c <- as.data.frame(breaks.num)
+  data.c <- cbind.data.frame(data.c[-1,], c$counts)
+  
+  total.number <- sum(data.c[,2])
+  data.c$pc <- data.c[,2]/total.number*100
+  colnames(data.c) <-c("MQ.localization.probability", "count", "pc.peptides")
+  
+  
+  data.c$peptide.pc <- data.c$pc.peptides
+  penu <- nrow(data.c)
+  for(i in 2:penu){
+    data.c$peptide.pc[i] <- {data.c$peptide.pc[i] + data.c$peptide.pc[i-1]}
+    
+  }
+  data.c$AA <- amino.acid2
+  data.c$Multiple.ID <- multiple1
+  
+  
+  d <- df[df$ID.aa == amino.acid2 & df$multiple == multiple2,]
+  d <- 
+    d %>% pull(loc) %>% hist(breaks = breaks.num)
+  data.d <- as.data.frame(breaks.num)
+  data.d <- cbind.data.frame(data.d[-1,], d$counts)
+  
+  total.number <- sum(data.d[,2])
+  data.d$pc <- data.d[,2]/total.number*100
+  colnames(data.d) <-c("MQ.localization.probability", "count", "pc.peptides")
+  
+  
+  data.d$peptide.pc <- data.d$pc.peptides
+  penu <- nrow(data.d)
+  for(i in 2:penu){
+    data.d$peptide.pc[i] <- {data.d$peptide.pc[i] + data.d$peptide.pc[i-1]}
+    
+  }
+  data.d$AA <- amino.acid2
+  data.d$Multiple.ID <- multiple2
+  
+  data.combined <- rbind(data.a, data.b, data.c, data.d)
+  return(data.combined)
+  
+}
+
+
+
+Localization <- localization.analysis(pRHSTY.aureus.filtered,"Localization.prob", breaks.num, "HSTY", "R", "Yes", "NO" )
+
+```
+
+Plot Andromeda localization probaility distribution
+
+```{r}
+
+localization.plot <-
+Localization %>% arrange(AA) %>%
+  mutate(AA = factor(AA, levels = c("HSTY","R"))) %>%
+  mutate(Multiple.ID = factor(Multiple.ID, levels = c("Yes","NO"))) %>%
+  ggplot(aes(x=peptide.pc, y=MQ.localization.probability, color= AA))+
+  geom_line(aes(linetype=Multiple.ID), size=1)+
+  scale_color_manual(values=c("#01665e","#762a83"))+
+  xlab("% of identified peptides")+
+  ylab("MaxQuant localization probability")+
+  theme(panel.background = element_blank(), axis.line = element_line(), legend.position = c(0.8, 0.5))
+
+```
+
+Combin plots
+
+```{r}
+ggarrange(localization.plot, Score.plot, labels = c("a)", "b)"), ncol = 2, nrow = 1)
+```
+

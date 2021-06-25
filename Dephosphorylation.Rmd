@@ -1,0 +1,539 @@
+---
+title: "Dephosporylation"
+author: "Nadine Prust"
+date: "6/24/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Dephosphorylation analysis
+All necessary data is deposited on Pride and can be downloaded. The used files for this script can be found in the MQ_output_txt.zip file. Add the MQ_output_txt folder then to your project folder to access the required data. 
+```{r}
+library(ggplot2)
+library(reshape2)
+library(ggpubr)
+```
+
+
+Read list of synthetic peptides and extract p-site position 
+
+```{r}
+
+pArg.syn.peptides <- read.delim("MQ_output_txt/Synthetic_peptides/Dephosphorylation/Synthetic_peptides_lists/Syn_pArg_peptides.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+pArg.syn.peptides$positions <- lapply(gregexpr(pattern= "R\\(PO3\\)", pArg.syn.peptides$Sequence), min) 
+pArg.syn.peptides$positions <- as.numeric(vapply(pArg.syn.peptides$positions, paste, collapse=", ", character(1L)))
+pArg.syn.peptides$ID <- paste(pArg.syn.peptides$Peptide, pArg.syn.peptides$positions, sep = ",")
+
+pST.syn.peptides <- read.delim("MQ_output_txt/Synthetic_peptides/Dephosphorylation/Synthetic_peptides_lists/Syn_pST_peptides.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+pST.syn.peptides$positions <-lapply(gregexpr(pattern= "[a-z]", pST.syn.peptides$Sequence), min) 
+pST.syn.peptides$positions <- as.numeric(vapply(pST.syn.peptides$positions, paste, collapse = ", ", character(1L)))
+pST.syn.peptides$ID <- paste(pST.syn.peptides$Pepetide, pST.syn.peptides$positions, sep =  ",")
+
+pY.syn.peptides <- read.delim("MQ_output_txt/Synthetic_peptides/Dephosphorylation/Synthetic_peptides_lists/Syn_pY_peptides.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+pY.syn.peptides$positions <-lapply(gregexpr(pattern= "[a-z]", pY.syn.peptides$Sequence), min) 
+pY.syn.peptides$positions <- as.numeric(vapply(pY.syn.peptides$positions, paste, collapse = ", ", character(1L)))
+pY.syn.peptides$ID <- paste(pY.syn.peptides$Pepetide, pY.syn.peptides$positions, sep =  ",")
+
+
+```
+
+Read MaxQuant (v1.6.17.0) "Phospho (RHSTY)sites.txt" output for synthetic pSTY peptides
+
+```{r}
+
+load.input <- function(MQ.data){
+  a <-read.delim(MQ.data, header = TRUE, stringsAsFactors = FALSE, dec = ".")
+  a <- a[a$Potential.contaminant!= "+",]
+  a <- a[which(a$Number.of.Phospho..RHSTY. != ""),]
+  a$ID <- paste(a$Proteins, a$Positions.within.proteins, sep = "," )
+  
+  return(a)
+}
+
+#Ctrl samples
+
+STY.Ctrl.1 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pSTY/Ctrl/R1/txt/Phospho (RHSTY)Sites_STY_Ctrl1.txt")
+STY.Ctrl.2 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pSTY/Ctrl/R2/txt/Phospho (RHSTY)Sites_STY_Ctrl2.txt")
+STY.Ctrl.3 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pSTY/Ctrl/R3/txt/Phospho (RHSTY)Sites_STY_Ctrl3.txt")
+STY.Ctrl.4 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pSTY/Ctrl/R4/txt/Phospho (RHSTY)Sites_STY_Ctrl4.txt")
+
+#extract correct pS/pT p-sites
+
+ID.ST.Ctrl.1<- STY.Ctrl.1[STY.Ctrl.1$ID %in% pST.syn.peptides$ID ,]
+ID.ST.Ctrl.1<- merge(ID.ST.Ctrl.1, pST.syn.peptides, by="ID")
+ID.ST.Ctrl.2<- STY.Ctrl.2[STY.Ctrl.2$ID %in% pST.syn.peptides$ID ,]
+ID.ST.Ctrl.2<- merge(ID.ST.Ctrl.2, pST.syn.peptides, by="ID")
+ID.ST.Ctrl.3<- STY.Ctrl.3[STY.Ctrl.3$ID %in% pST.syn.peptides$ID ,]
+ID.ST.Ctrl.3<- merge(ID.ST.Ctrl.3, pST.syn.peptides, by="ID")
+ID.ST.Ctrl.4<- STY.Ctrl.4[STY.Ctrl.4$ID %in% pST.syn.peptides$ID ,]
+ID.ST.Ctrl.4<- merge(ID.ST.Ctrl.4, pST.syn.peptides, by="ID")
+
+ST.Ctrl <- cbind.data.frame("Condition" = "Ctrl","Rep" = "R1", "Number.id" = nrow(ID.ST.Ctrl.1), 
+                            "PC.ST" = nrow(ID.ST.Ctrl.1)/nrow(pST.syn.peptides)*100)
+
+ST.Ctrl <- rbind.data.frame(ST.Ctrl, 
+                            cbind.data.frame("Condition" = "Ctrl", "Rep" = "R2", "Number.id" = nrow(ID.ST.Ctrl.2), 
+                                             "PC.ST" = nrow(ID.ST.Ctrl.2)/nrow(pST.syn.peptides)*100))
+ST.Ctrl <- rbind.data.frame(ST.Ctrl, 
+                            cbind.data.frame("Condition" = "Ctrl", "Rep" = "R3", "Number.id" = nrow(ID.ST.Ctrl.3), 
+                                             "PC.ST" = nrow(ID.ST.Ctrl.3)/nrow(pST.syn.peptides)*100))
+ST.Ctrl <- rbind.data.frame(ST.Ctrl, 
+                            cbind.data.frame("Condition" = "Ctrl", "Rep" = "R4", "Number.id" = nrow(ID.ST.Ctrl.4), 
+                                             "PC.ST" = nrow(ID.ST.Ctrl.4)/nrow(pST.syn.peptides)*100))
+
+#extract correct pY p-sites
+ID.Y.Ctrl.1<- STY.Ctrl.1[STY.Ctrl.1$ID %in% pY.syn.peptides$ID ,]
+ID.Y.Ctrl.1<- merge(ID.Y.Ctrl.1, pY.syn.peptides, by="ID")
+ID.Y.Ctrl.2<- STY.Ctrl.2[STY.Ctrl.2$ID %in% pY.syn.peptides$ID ,]
+ID.Y.Ctrl.2<- merge(ID.Y.Ctrl.2, pY.syn.peptides, by="ID")
+ID.Y.Ctrl.3<- STY.Ctrl.3[STY.Ctrl.3$ID %in% pY.syn.peptides$ID ,]
+ID.Y.Ctrl.3<- merge(ID.Y.Ctrl.3, pY.syn.peptides, by="ID")
+ID.Y.Ctrl.4<- STY.Ctrl.4[STY.Ctrl.4$ID %in% pY.syn.peptides$ID ,]
+ID.Y.Ctrl.4<- merge(ID.Y.Ctrl.4, pY.syn.peptides, by="ID")
+
+Y.Ctrl <- cbind.data.frame("Condition" = "Ctrl","Rep" = "R1", "Number.id" = nrow(ID.Y.Ctrl.1), 
+                           "PC.Y" = nrow(ID.Y.Ctrl.1)/nrow(pY.syn.peptides)*100)
+
+Y.Ctrl <- rbind.data.frame(Y.Ctrl, 
+                           cbind.data.frame("Condition" = "Ctrl", "Rep" = "R2", "Number.id" = nrow(ID.Y.Ctrl.2), 
+                                            "PC.Y" = nrow(ID.Y.Ctrl.2)/nrow(pY.syn.peptides)*100))
+Y.Ctrl <- rbind.data.frame(Y.Ctrl, 
+                           cbind.data.frame("Condition" = "Ctrl", "Rep" = "R3", "Number.id" = nrow(ID.Y.Ctrl.3), 
+                                            "PC.Y" = nrow(ID.Y.Ctrl.3)/nrow(pY.syn.peptides)*100))
+Y.Ctrl <- rbind.data.frame(Y.Ctrl, 
+                           cbind.data.frame("Condition" = "Ctrl", "Rep" = "R4", "Number.id" = nrow(ID.Y.Ctrl.4), 
+                                            "PC.Y" = nrow(ID.Y.Ctrl.4)/nrow(pY.syn.peptides)*100))
+
+
+
+#Stp1
+STY.Stp1.1 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pSTY/Stp1/R1/txt/Phospho (RHSTY)Sites_STY_Stp1_1.txt")
+STY.Stp1.2 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pSTY/Stp1/R2/txt/Phospho (RHSTY)Sites_STY_Stp1_2.txt")
+STY.Stp1.3 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pSTY/Stp1/R3/txt/Phospho (RHSTY)Sites_STY_Stp1_3.txt")
+STY.Stp1.4 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pSTY/Stp1/R4/txt/Phospho (RHSTY)Sites_STY_Stp1_4.txt")
+
+
+#extract correct pS/pT p-sites
+ID.ST.Stp1.1<- STY.Stp1.1[STY.Stp1.1$ID %in% pST.syn.peptides$ID ,]
+ID.ST.Stp1.1<- merge(ID.ST.Stp1.1, pST.syn.peptides, by="ID")
+ID.ST.Stp1.2<- STY.Stp1.2[STY.Stp1.2$ID %in% pST.syn.peptides$ID ,]
+ID.ST.Stp1.2<- merge(ID.ST.Stp1.2, pST.syn.peptides, by="ID")
+ID.ST.Stp1.3<- STY.Stp1.3[STY.Stp1.3$ID %in% pST.syn.peptides$ID ,]
+ID.ST.Stp1.3<- merge(ID.ST.Stp1.3, pST.syn.peptides, by="ID")
+ID.ST.Stp1.4<- STY.Stp1.4[STY.Stp1.4$ID %in% pST.syn.peptides$ID ,]
+ID.ST.Stp1.4<- merge(ID.ST.Stp1.4, pST.syn.peptides, by="ID")
+
+ST.Stp1 <- cbind.data.frame("Condition" = "Stp1","Rep" = "R1", "Number.id" = nrow(ID.ST.Stp1.1), 
+                            "PC.ST" = nrow(ID.ST.Stp1.1)/nrow(pST.syn.peptides)*100)
+
+ST.Stp1 <- rbind.data.frame(ST.Stp1, 
+                             cbind.data.frame("Condition" = "Stp1", "Rep" = "R2", "Number.id" = nrow(ID.ST.Stp1.2), 
+                                              "PC.ST" = nrow(ID.ST.Stp1.2)/nrow(pST.syn.peptides)*100))
+ST.Stp1 <- rbind.data.frame(ST.Stp1, 
+                             cbind.data.frame("Condition" = "Stp1", "Rep" = "R3", "Number.id" = nrow(ID.ST.Stp1.3), 
+                                              "PC.ST" = nrow(ID.ST.Stp1.3)/nrow(pST.syn.peptides)*100))
+ST.Stp1 <- rbind.data.frame(ST.Stp1, 
+                             cbind.data.frame("Condition" = "Stp1", "Rep" = "R4", "Number.id" = nrow(ID.ST.Stp1.4), 
+                                              "PC.ST" = nrow(ID.ST.Stp1.4)/nrow(pST.syn.peptides)*100))
+#Extract correct pY p-sites
+
+ID.Y.Stp1.1<- STY.Stp1.1[STY.Stp1.1$ID %in% pY.syn.peptides$ID ,]
+ID.Y.Stp1.1<- merge(ID.Y.Stp1.1, pY.syn.peptides, by="ID")
+ID.Y.Stp1.2<- STY.Stp1.2[STY.Stp1.2$ID %in% pY.syn.peptides$ID ,]
+ID.Y.Stp1.2<- merge(ID.Y.Stp1.2, pY.syn.peptides, by="ID")
+ID.Y.Stp1.3<- STY.Stp1.3[STY.Stp1.3$ID %in% pY.syn.peptides$ID ,]
+ID.Y.Stp1.3<- merge(ID.Y.Stp1.3, pY.syn.peptides, by="ID")
+ID.Y.Stp1.4<- STY.Stp1.4[STY.Stp1.4$ID %in% pY.syn.peptides$ID ,]
+ID.Y.Stp1.4<- merge(ID.Y.Stp1.4, pY.syn.peptides, by="ID")
+
+Y.Stp1 <- cbind.data.frame("Condition" = "Stp1","Rep" = "R1", "Number.id" = nrow(ID.Y.Stp1.1), 
+                            "PC.Y" = nrow(ID.Y.Stp1.1)/nrow(pY.syn.peptides)*100)
+
+Y.Stp1 <- rbind.data.frame(Y.Stp1, 
+                            cbind.data.frame("Condition" = "Stp1", "Rep" = "R2", "Number.id" = nrow(ID.Y.Stp1.2), 
+                                             "PC.Y" = nrow(ID.Y.Stp1.2)/nrow(pY.syn.peptides)*100))
+Y.Stp1 <- rbind.data.frame(Y.Stp1, 
+                            cbind.data.frame("Condition" = "Stp1", "Rep" = "R3", "Number.id" = nrow(ID.Y.Stp1.3), 
+                                             "PC.Y" = nrow(ID.Y.Stp1.3)/nrow(pY.syn.peptides)*100))
+Y.Stp1 <- rbind.data.frame(Y.Stp1, 
+                            cbind.data.frame("Condition" = "Stp1", "Rep" = "R4", "Number.id" = nrow(ID.Y.Stp1.4), 
+                                             "PC.Y" = nrow(ID.Y.Stp1.4)/nrow(pY.syn.peptides)*100))
+
+
+#rSAP
+
+STY.rSAP.1 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pSTY/rSAP/R1/txt/Phospho (RHSTY)Sites_STY_rSAP1.txt")
+STY.rSAP.2 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pSTY/rSAP/R2/txt/Phospho (RHSTY)Sites_STY_rSAP2.txt")
+STY.rSAP.3 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pSTY/rSAP/R3/txt/Phospho (RHSTY)Sites_STY_rSAP3.txt")
+STY.rSAP.4 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pSTY/rSAP/R4/txt/Phospho (RHSTY)Sites_STY_rSAP4.txt")
+
+
+#Extract correct pS/pT p-sites
+ID.ST.rSAP.1<- STY.rSAP.1[STY.rSAP.1$ID %in% pST.syn.peptides$ID ,]
+ID.ST.rSAP.1<- merge(ID.ST.rSAP.1, pST.syn.peptides, by="ID")
+ID.ST.rSAP.2<- STY.rSAP.2[STY.rSAP.2$ID %in% pST.syn.peptides$ID ,]
+ID.ST.rSAP.2<- merge(ID.ST.rSAP.2, pST.syn.peptides, by="ID")
+ID.ST.rSAP.3<- STY.rSAP.3[STY.rSAP.3$ID %in% pST.syn.peptides$ID ,]
+ID.ST.rSAP.3<- merge(ID.ST.rSAP.3, pST.syn.peptides, by="ID")
+ID.ST.rSAP.4<- STY.rSAP.4[STY.rSAP.4$ID %in% pST.syn.peptides$ID ,]
+ID.ST.rSAP.4<- merge(ID.ST.rSAP.4, pST.syn.peptides, by="ID")
+
+ST.rSAP <- cbind.data.frame("Condition" = "rSAP","Rep" = "R1", "Number.id" = nrow(ID.ST.rSAP.1), 
+                            "PC.ST" = nrow(ID.ST.rSAP.1)/nrow(pST.syn.peptides)*100)
+
+ST.rSAP <- rbind.data.frame(ST.rSAP, 
+                            cbind.data.frame("Condition" = "rSAP", "Rep" = "R2", "Number.id" = nrow(ID.ST.rSAP.2), 
+                                             "PC.ST" = nrow(ID.ST.rSAP.2)/nrow(pST.syn.peptides)*100))
+ST.rSAP <- rbind.data.frame(ST.rSAP, 
+                            cbind.data.frame("Condition" = "rSAP", "Rep" = "R3", "Number.id" = nrow(ID.ST.rSAP.3), 
+                                             "PC.ST" = nrow(ID.ST.rSAP.3)/nrow(pST.syn.peptides)*100))
+ST.rSAP <- rbind.data.frame(ST.rSAP, 
+                            cbind.data.frame("Condition" = "rSAP", "Rep" = "R4", "Number.id" = nrow(ID.ST.rSAP.4), 
+                                             "PC.ST" = nrow(ID.ST.rSAP.4)/nrow(pST.syn.peptides)*100))
+#Extract correct pY p-sites
+
+ID.Y.rSAP.1<- STY.rSAP.1[STY.rSAP.1$ID %in% pY.syn.peptides$ID ,]
+ID.Y.rSAP.1<- merge(ID.Y.rSAP.1, pY.syn.peptides, by="ID")
+ID.Y.rSAP.2<- STY.rSAP.2[STY.rSAP.2$ID %in% pY.syn.peptides$ID ,]
+ID.Y.rSAP.2<- merge(ID.Y.rSAP.2, pY.syn.peptides, by="ID")
+ID.Y.rSAP.3<- STY.rSAP.3[STY.rSAP.3$ID %in% pY.syn.peptides$ID ,]
+ID.Y.rSAP.3<- merge(ID.Y.rSAP.3, pY.syn.peptides, by="ID")
+ID.Y.rSAP.4<- STY.rSAP.4[STY.rSAP.4$ID %in% pY.syn.peptides$ID ,]
+ID.Y.rSAP.4<- merge(ID.Y.rSAP.4, pY.syn.peptides, by="ID")
+
+Y.rSAP <- cbind.data.frame("Condition" = "rSAP","Rep" = "R1", "Number.id" = nrow(ID.Y.rSAP.1), 
+                           "PC.Y" = nrow(ID.Y.rSAP.1)/nrow(pY.syn.peptides)*100)
+
+Y.rSAP <- rbind.data.frame(Y.rSAP, 
+                           cbind.data.frame("Condition" = "rSAP", "Rep" = "R2", "Number.id" = nrow(ID.Y.rSAP.2), 
+                                            "PC.Y" = nrow(ID.Y.rSAP.2)/nrow(pY.syn.peptides)*100))
+Y.rSAP <- rbind.data.frame(Y.rSAP, 
+                           cbind.data.frame("Condition" = "rSAP", "Rep" = "R3", "Number.id" = nrow(ID.Y.rSAP.3), 
+                                            "PC.Y" = nrow(ID.Y.rSAP.3)/nrow(pY.syn.peptides)*100))
+Y.rSAP <- rbind.data.frame(Y.rSAP, 
+                           cbind.data.frame("Condition" = "rSAP", "Rep" = "R4", "Number.id" = nrow(ID.Y.rSAP.4), 
+                                            "PC.Y" = nrow(ID.Y.rSAP.4)/nrow(pY.syn.peptides)*100))
+
+```
+
+Read MaxQuant "Phospho (RHSTY)sites.txt" output stored on the Pride archive for synthetic pArg peptides, add the respective prefix for the different replicates as stated below in the function
+
+```{r}
+
+#Ctrl
+
+pArg.Ctrl.1 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pArg/Ctrl/R1/txt/Phospho (RHSTY)Sites_pArg_Ctrl1.txt")
+pArg.Ctrl.2 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pArg/Ctrl/R2/txt/Phospho (RHSTY)Sites_pArg_Ctrl2.txt")
+pArg.Ctrl.3 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pArg/Ctrl/R3/txt/Phospho (RHSTY)Sites_pArg_Ctrl3.txt")
+pArg.Ctrl.4 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pArg/Ctrl/R4/txt/Phospho (RHSTY)Sites_pArg_Ctrl4.txt")
+
+#Extract correct pArg peptides
+ID.pArg.Ctrl.1 <- pArg.Ctrl.1[pArg.Ctrl.1$ID %in% pArg.syn.peptides$ID ,]
+ID.pArg.Ctrl.2 <- pArg.Ctrl.2[pArg.Ctrl.2$ID %in% pArg.syn.peptides$ID ,]
+ID.pArg.Ctrl.3 <- pArg.Ctrl.3[pArg.Ctrl.3$ID %in% pArg.syn.peptides$ID ,]
+ID.pArg.Ctrl.4 <- pArg.Ctrl.4[pArg.Ctrl.4$ID %in% pArg.syn.peptides$ID ,]
+
+#Calculate percentage of identified synthetic peptides and combine replicates in one data frame 
+pArg.ctrl <- cbind.data.frame("Condition" = "Ctrl","Rep" = "R1", "Number.id" = nrow(ID.pArg.Ctrl.1), "PC.pArg" = nrow(ID.pArg.Ctrl.1)/nrow(pArg.syn.peptides)*100)
+
+pArg.ctrl <- rbind.data.frame(pArg.ctrl, 
+                              cbind.data.frame("Condition" = "Ctrl", "Rep" = "R2", "Number.id" = nrow(ID.pArg.Ctrl.2), "PC.pArg" = nrow(ID.pArg.Ctrl.2)/nrow(pArg.syn.peptides)*100))
+pArg.ctrl <- rbind.data.frame(pArg.ctrl, 
+                              cbind.data.frame("Condition" = "Ctrl", "Rep" = "R3", "Number.id" = nrow(ID.pArg.Ctrl.3), "PC.pArg" = nrow(ID.pArg.Ctrl.3)/nrow(pArg.syn.peptides)*100))
+pArg.ctrl <- rbind.data.frame(pArg.ctrl, 
+                              cbind.data.frame("Condition" = "Ctrl", "Rep" = "R4", "Number.id" = nrow(ID.pArg.Ctrl.4), "PC.pArg" = nrow(ID.pArg.Ctrl.4)/nrow(pArg.syn.peptides)*100))
+
+###Stp1
+
+
+pArg.Stp1.1 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pArg/Stp1/R1/txt/Phospho (RHSTY)Sites_pArg_Stp1_1.txt")
+pArg.Stp1.2 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pArg/Stp1/R2/txt/Phospho (RHSTY)Sites_pArg_Stp1_2.txt")
+pArg.Stp1.3 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pArg/Stp1/R3/txt/Phospho (RHSTY)Sites_pArg_Stp1_3.txt")
+pArg.Stp1.4 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pArg/Stp1/R4/txt/Phospho (RHSTY)Sites_pArg_Stp1_4.txt")
+
+#Extract correct pArg peptides
+ID.pArg.Stp1.1 <- pArg.Stp1.1[pArg.Stp1.1$ID %in% pArg.syn.peptides$ID ,]
+ID.pArg.Stp1.2 <- pArg.Stp1.2[pArg.Stp1.2$ID %in% pArg.syn.peptides$ID ,]
+ID.pArg.Stp1.3 <- pArg.Stp1.3[pArg.Stp1.3$ID %in% pArg.syn.peptides$ID ,]
+ID.pArg.Stp1.4 <- pArg.Stp1.4[pArg.Stp1.4$ID %in% pArg.syn.peptides$ID ,]
+
+#Calculate percentage of identified synthetic peptides and combine replicates in one data frame 
+pArg.Stp1 <- cbind.data.frame("Condition" = "Stp1","Rep" = "R1", "Number.id" = nrow(ID.pArg.Stp1.1), "PC.pArg" = nrow(ID.pArg.Stp1.1)/nrow(pArg.syn.peptides)*100)
+
+pArg.Stp1 <- rbind.data.frame(pArg.Stp1, 
+                              cbind.data.frame("Condition" = "Stp1","Rep" = "R2", "Number.id" = nrow(ID.pArg.Stp1.2), "PC.pArg" = nrow(ID.pArg.Stp1.2)/nrow(pArg.syn.peptides)*100))
+pArg.Stp1 <- rbind.data.frame(pArg.Stp1, 
+                              cbind.data.frame("Condition" = "Stp1","Rep" = "R3", "Number.id" = nrow(ID.pArg.Stp1.3), "PC.pArg" = nrow(ID.pArg.Stp1.3)/nrow(pArg.syn.peptides)*100))
+pArg.Stp1 <- rbind.data.frame(pArg.Stp1, 
+                              cbind.data.frame("Condition" = "Stp1","Rep" = "R4", "Number.id" = nrow(ID.pArg.Stp1.4), "PC.pArg" = nrow(ID.pArg.Stp1.4)/nrow(pArg.syn.peptides)*100))
+
+####rSAP
+
+
+pArg.rSAP1 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pArg/rSAP/R1/txt/Phospho (RHSTY)Sites_pArg_rSAP1.txt")
+pArg.rSAP2 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pArg/rSAP/R2/txt/Phospho (RHSTY)Sites_rSAP_2.txt")
+pArg.rSAP3 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pArg/rSAP/R3/txt/Phospho (RHSTY)Sites_rSAP_3.txt")
+pArg.rSAP4 <- load.input("MQ_output_txt/Synthetic_peptides/Dephosphorylation/pArg/rSAP/R4/txt/Phospho (RHSTY)Sites_rSAP_4.txt")
+
+#Extract correct pArg peptides
+ID.pArg.rSAP.1 <- pArg.rSAP1[pArg.rSAP1$ID %in% pArg.syn.peptides$ID ,]
+ID.pArg.rSAP.2 <- pArg.rSAP2[pArg.rSAP2$ID %in% pArg.syn.peptides$ID ,]
+ID.pArg.rSAP.3 <- pArg.rSAP3[pArg.rSAP3$ID %in% pArg.syn.peptides$ID ,]
+ID.pArg.rSAP.4 <- pArg.rSAP4[pArg.rSAP4$ID %in% pArg.syn.peptides$ID ,]
+
+#Calculate percentage of identified synthetic peptides and combine replicates in one data frame 
+pArg.rSAP <- cbind.data.frame("Condition" = "rSAP", "Rep" = "R1", "Number.id" = nrow(ID.pArg.rSAP.1), "PC.pArg" = nrow(ID.pArg.rSAP.1)/nrow(pArg.syn.peptides)*100)
+
+pArg.rSAP <- rbind.data.frame(pArg.rSAP, 
+                              cbind.data.frame("Condition" = "rSAP","Rep" = "R2", "Number.id" = nrow(ID.pArg.rSAP.2), "PC.pArg" = nrow(ID.pArg.rSAP.2)/nrow(pArg.syn.peptides)*100))
+pArg.rSAP <- rbind.data.frame(pArg.rSAP, 
+                              cbind.data.frame("Condition" = "rSAP","Rep" = "R3", "Number.id" = nrow(ID.pArg.rSAP.3), "PC.pArg" = nrow(ID.pArg.rSAP.3)/nrow(pArg.syn.peptides)*100))
+pArg.rSAP <- rbind.data.frame(pArg.rSAP, 
+                              cbind.data.frame("Condition" = "rSAP","Rep" = "R4", "Number.id" = nrow(ID.pArg.rSAP.4), "PC.pArg" = nrow(ID.pArg.rSAP.4)/nrow(pArg.syn.peptides)*100))
+
+```
+
+Plot Boxplots with percentages of identified synthetic peptides
+
+```{r}
+pST <- rbind.data.frame(ST.Ctrl, ST.Stp1, ST.rSAP)
+pY <- rbind.data.frame(Y.Ctrl, Y.Stp1, Y.rSAP)
+pArg <- rbind.data.frame(pArg.ctrl, pArg.Stp1, pArg.rSAP)
+
+pST.plot <- 
+  pST %>%
+  ggplot(aes(x=Condition, y=PC.ST, fill=Condition))+
+  geom_boxplot(show.legend = FALSE )+
+  scale_fill_manual(values = c("Ctrl" = "#80146E", "Stp1" = "#6771B8", "rSAP" = "#58C9BC") )+
+  stat_summary(fun=mean, geom="point", shape=23, size=3, show.legend = FALSE)+
+  theme(axis.title.x = element_blank(), panel.background =  element_blank(), axis.line = element_line())+
+  ylab("Identified synthetic pST peptides [%]")
+
+pY.plot <- 
+  pY %>%
+  ggplot(aes(x=Condition, y=PC.Y, fill=Condition))+
+  geom_boxplot(show.legend = FALSE  )+
+  scale_fill_manual(values = c("Ctrl" = "#80146E", "Stp1" = "#6771B8", "rSAP" = "#58C9BC") )+
+  stat_summary(fun=mean, geom="point", shape=23, size=3, show.legend = FALSE)+
+  theme(axis.title.x = element_blank(), panel.background =  element_blank(), axis.line = element_line())+
+  ylab("Identified synthetic pY peptides [%]")
+
+pArg.plot <- pArg %>%
+ggplot(aes(x=Condition, y=PC.pArg, fill=Condition))+
+  geom_boxplot(show.legend = FALSE)+
+  scale_fill_manual(values = c("Ctrl" = "#80146E", "Stp1" = "#6771B8", "rSAP" = "#58C9BC") )+
+  stat_summary(fun=mean, geom="point", shape=23, size=3, show.legend = FALSE)+
+  theme(axis.title.x = element_blank(), panel.background =  element_blank(), axis.line = element_line())+
+  ylab("Identified synthetic pArg peptides [%]")
+
+```
+
+## Dephosphorylation of endogenous peptides
+
+Read MaxQuant "Evidence.txt" output from endogenous dephosphorylated samples
+
+```{r}
+evidence.Ctrl.1 <- read.delim("MQ_output_txt/Endogenous_data/Dephosphorylation/Ctrl/R1/txt/evidence_Ctrl1.txt" , header = TRUE, stringsAsFactors = FALSE, dec = ".")
+evidence.Ctrl.2 <- read.delim("MQ_output_txt/Endogenous_data/Dephosphorylation/Ctrl/R2/txt/evidence_Ctrl2.txt" , header = TRUE, stringsAsFactors = FALSE, dec = ".")
+evidence.Ctrl.3 <- read.delim("MQ_output_txt/Endogenous_data/Dephosphorylation/Ctrl/R3/txt/evidence_Ctrl3.txt" , header = TRUE, stringsAsFactors = FALSE, dec = ".")
+
+evidence.Stp1.1<- read.delim("MQ_output_txt/Endogenous_data/Dephosphorylation/Stp1/R1/txt/evidence_Stp1_1.txt" , header = TRUE, stringsAsFactors = FALSE, dec = ".")
+evidence.Stp1.2<- read.delim("MQ_output_txt/Endogenous_data/Dephosphorylation/Stp1/R2/txt/evidence_Stp1_2.txt" , header = TRUE, stringsAsFactors = FALSE, dec = ".")
+evidence.Stp1.3<- read.delim("MQ_output_txt/Endogenous_data/Dephosphorylation/Stp1/R3/txt/evidence_Stp1_3.txt" , header = TRUE, stringsAsFactors = FALSE, dec = ".")
+```
+
+Filter data for "Reverse" and "Potential Contaminants" as well ans on duplicated entries on "Modified Sequence" and calculate the percentage of phosphopeptides
+
+```{r}
+average_numbers <- function(df1, df2, df3){
+  a <- df1[df1$Reverse != "+",]
+  a<- df1[df1$Potential.contaminant != "+",]
+  a<- df1[!duplicated(df1$Modified.sequence),]
+  
+  b <- df2[df2$Reverse != "+",]
+  b<- df2[df2$Potential.contaminant != "+",]
+  b<- df2[!duplicated(df2$Modified.sequence),]
+  
+  c <- df3[df3$Reverse != "+",]
+  c<- df3[df3$Potential.contaminant != "+",]
+  c<- df3[!duplicated(df3$Modified.sequence),]
+  
+  d<- rbind.data.frame(cbind( "No.peptides" = nrow(a), 
+                        "No.phosphopeptides" = nrow(a[a$Phospho..RHSTY. != 0,]), 
+                        "PC.ppeptides" = nrow(a[a$Phospho..RHSTY. != 0,]) / nrow(a)*100),
+                       cbind( "No.peptides" = nrow(b), 
+                                         "No.phosphopeptides" = nrow(b[b$Phospho..RHSTY. != 0,]), 
+                                         "PC.ppeptides" =nrow(b[b$Phospho..RHSTY. != 0,]) / nrow(b)*100),
+                       cbind("No.peptides" = nrow(c), 
+                                         "No.phosphopeptides" = nrow(c[c$Phospho..RHSTY. != 0,]), 
+                                         "PC.ppeptides" =nrow(c[c$Phospho..RHSTY. != 0,]) / nrow(c)*100))
+
+  return(d)
+}
+
+Ctrl.peptides <- average_numbers(evidence.Ctrl.1, evidence.Ctrl.2, evidence.Ctrl.3)
+STp1.peptides <- average_numbers(evidence.Stp1.1, evidence.Stp1.2, evidence.Stp1.3)
+```
+
+Calculate the average of identified peptides, phosphopeptides in percentage of identified phosphopeptides
+
+```{r}
+Peptide.number.comp <- rbind.data.frame(cbind("Sample"= "Ctrl","ID" = "Peptides", "Average" = mean(Ctrl.peptides$No.peptides), 
+                                              "SD" =sd(Ctrl.peptides$No.peptides)),
+                                        cbind("Sample" = "Ctrl", "ID" = "Phosphopeptides", 
+                                              "Average" = mean(Ctrl.peptides$No.phosphopeptides), 
+                                              "SD" =sd(Ctrl.peptides$No.phosphopeptides)),
+                                        cbind("Sample"= "Stp1","ID" = "Peptides", "Average" = mean(STp1.peptides$No.peptides), 
+                                              "SD" = sd(STp1.peptides$No.peptides)),
+                                        cbind("Sample" = "Stp1", "ID" = "Phosphopeptides", 
+                                              "Average" = mean(STp1.peptides$No.phosphopeptides), 
+                                              "SD" = sd(STp1.peptides$No.phosphopeptides)))
+Peptide.number.comp$Average <- as.numeric(as.character(Peptide.number.comp$Average))
+Peptide.number.comp$SD <- as.numeric(as.character(Peptide.number.comp$SD))
+```
+
+Plot bar graph with number average number of identification
+
+```{r}
+Peptide.plot <- 
+  ggplot(Peptide.number.comp, aes(x=Sample, y= Average, fill= Sample))+
+  geom_bar( stat="identity", position = position_dodge())+
+  geom_errorbar(data = Peptide.number.comp, aes(x=Sample, ymin=Average-SD, ymax=Average+SD), width=.1) +
+  scale_fill_manual(values = c("Ctrl" = "#80146E", "Stp1" = "#6771B8"))+
+  theme(axis.title.x = element_blank(), panel.background =  element_blank(), axis.line = element_line())+
+  ylab("Average number of identification")+
+    facet_wrap(~ID)
+```
+
+## Phosphosite distribution analysis
+
+Read MaxQuant "Phospho (RHSTY)Sites.txt" output
+
+```{r}
+  Ctrl.1 <- read.delim("MQ_output_txt/Endogenous_data/Dephosphorylation/Ctrl/R1/txt/Phospho (RHSTY)Sites_Ctrl1.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+  Ctrl.2 <- read.delim("MQ_output_txt/Endogenous_data/Dephosphorylation/Ctrl/R2/txt/Phospho (RHSTY)Sites_Ctrl2.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+  Ctrl.3 <- read.delim("MQ_output_txt/Endogenous_data/Dephosphorylation/Ctrl/R3/txt/Phospho (RHSTY)Sites_Ctrl3.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+  Stp1.1 <- read.delim("MQ_output_txt/Endogenous_data/Dephosphorylation/Stp1/R1/txt/Phospho (RHSTY)Sites_Stp1_1.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+  Stp1.2 <- read.delim("MQ_output_txt/Endogenous_data/Dephosphorylation/Stp1/R2/txt/Phospho (RHSTY)Sites_Stp1_2.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+  Stp1.3 <- read.delim("MQ_output_txt/Endogenous_data/Dephosphorylation/Stp1/R3/txt/Phospho (RHSTY)Sites_Stp1_3.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+```  
+
+Filter for "Reverse", and "Potential contaminants" and determine the average number and fractions of pS. pT, pY, pH and pR 
+
+```{r}
+psites.extraction <- function(df1, df2, df3, SAMPLE){
+    a <- df1[df1$Reverse != "+",]
+    a<- a[a$Potential.contaminant != "+",]
+    
+    a.dis <- data.frame(
+      category=as.character(c("pS", "pT", "pY", "pH", "pR")),
+      count=as.numeric(as.character(c(nrow(a[a$Amino.acid == "S",]), nrow(a[a$Amino.acid == "T",]), 
+              nrow(a[a$Amino.acid == "Y",]), nrow(a[a$Amino.acid == "H",]),
+              nrow(a[a$Amino.acid == "R",])))),
+      Replicate = "R1"
+    )
+    a.dis$fraction <- a.dis$count/sum(a.dis$count)*100
+    
+    b <- df2[df2$Reverse != "+",]
+    b<- b[b$Potential.contaminant != "+",]
+    
+    b.dis <- data.frame(
+      category=as.character(c("pS", "pT", "pY", "pH", "pR")),
+      count= as.numeric(as.character(c(nrow(b[b$Amino.acid == "S",]), nrow(b[b$Amino.acid == "T",]), 
+              nrow(b[b$Amino.acid == "Y",]), nrow(b[b$Amino.acid == "H",]),
+              nrow(b[b$Amino.acid == "R",])))),
+      Replicate = "R2"
+    )
+    b.dis$fraction <- b.dis$count/ sum(b.dis$count)*100
+    
+    c <- df3[df3$Reverse != "+",]
+    c<- c[c$Potential.contaminant != "+",]
+    
+    c.dis <- data.frame(
+      category=as.character(c("pS", "pT", "pY", "pH", "pR")),
+      count=as.numeric(as.character(c(nrow(c[c$Amino.acid == "S",]), nrow(c[c$Amino.acid == "T",]), 
+              nrow(c[c$Amino.acid == "Y",]), nrow(c[c$Amino.acid == "H",]),
+              nrow(c[c$Amino.acid == "R",])))),
+      Replicate = "R3"
+    )
+    c.dis$fraction <- c.dis$count / sum(c.dis$count)*100
+  d <- rbind.data.frame(a.dis, b.dis, c.dis)
+      d<- d %>% group_by(category) %>% mutate("Average" = mean(count), "SD" = sd(count), 
+                                              "Avg.fraction" = mean(fraction), "SD.fraction" = sd(fraction))
+    
+    d<- d[!duplicated(d$category), c("category", "Average", "SD", "Avg.fraction", "SD.fraction")]
+    d$Sample <- SAMPLE
+    return(d)
+    
+  }
+  
+  Ctrl.psites <- psites.extraction(Ctrl.1, Ctrl.2, Ctrl.3, "Ctrl")
+  #Adjust values for stack error bars
+  Ctrl.psites$vadj <- ifelse(Ctrl.psites$category == "pY",
+                             0,
+                             ifelse(Ctrl.psites$category == "pT",
+                                    Ctrl.psites[Ctrl.psites$category == "pY", "Avg.fraction"],
+                                    ifelse(Ctrl.psites$category =="pS",
+                                           sum(Ctrl.psites[Ctrl.psites$category == "pY", "Avg.fraction"], 
+                                               Ctrl.psites[Ctrl.psites$category == "pT", "Avg.fraction"]),
+                                           ifelse(Ctrl.psites$category == "pR", 
+                                                  sum(Ctrl.psites[Ctrl.psites$category == "pY", "Avg.fraction"], 
+                                                      Ctrl.psites[Ctrl.psites$category == "pT", "Avg.fraction"],
+                                                      Ctrl.psites[Ctrl.psites$category == "pS", "Avg.fraction"]),
+                                                  sum(Ctrl.psites[Ctrl.psites$category == "pY", "Avg.fraction"], 
+                                                      Ctrl.psites[Ctrl.psites$category == "pT", "Avg.fraction"],
+                                                      Ctrl.psites[Ctrl.psites$category == "pS", "Avg.fraction"],
+                                                      Ctrl.psites[Ctrl.psites$category == "pR", "Avg.fraction"]))))
+)
+  
+  Ctrl.psites$vadj <-  vapply(Ctrl.psites$vadj, paste, collapse = ", ", character(1L))
+ Stp1.psites <- psites.extraction(Stp1.1, Stp1.2, Stp1.3, "Stp1")
+ 
+ Stp1.psites$vadj <- ifelse(Stp1.psites$category == "pY",
+                            0,
+                            ifelse(Stp1.psites$category == "pT",
+                                   Stp1.psites[Stp1.psites$category == "pY", "Avg.fraction"],
+                                   ifelse(Stp1.psites$category =="pS",
+                                          sum(Stp1.psites[Stp1.psites$category == "pY", "Avg.fraction"], 
+                                              Stp1.psites[Stp1.psites$category == "pT", "Avg.fraction"]),
+                                          ifelse(Stp1.psites$category == "pR", 
+                                                 sum(Stp1.psites[Stp1.psites$category == "pY", "Avg.fraction"], 
+                                                     Stp1.psites[Stp1.psites$category == "pT", "Avg.fraction"],
+                                                     Stp1.psites[Stp1.psites$category == "pS", "Avg.fraction"]),
+                                                 sum(Stp1.psites[Stp1.psites$category == "pY", "Avg.fraction"], 
+                                                     Stp1.psites[Stp1.psites$category == "pT", "Avg.fraction"],
+                                                     Stp1.psites[Stp1.psites$category == "pS", "Avg.fraction"],
+                                                     Stp1.psites[Stp1.psites$category == "pR", "Avg.fraction"]))))
+ )
+ Stp1.psites$vadj <-  vapply(Stp1.psites$vadj, paste, collapse = ", ", character(1L))
+ 
+ psites <- rbind.data.frame(Ctrl.psites, Stp1.psites)
+ psites$vadj <- as.numeric(psites$vadj)
+```
+
+Plot stacked bar graph with percentages of p-sites
+
+```{r}
+psite.dis <- 
+   ggplot(psites, aes(x=Sample, y=Avg.fraction, fill=category))+
+   geom_bar(stat = "identity", position = "stack")+
+   geom_errorbar(data = psites, aes(x=Sample, ymin= Avg.fraction+vadj - SD.fraction, ymax=Avg.fraction+vadj+SD.fraction),
+                 stat = "identity", position = "identity", width=.1)+
+     geom_text(data = psites, aes(x=Sample, y= Avg.fraction, label=Average), 
+               position = position_stack(vjust = 0.5))+
+   scale_fill_manual(values = c("pS"= "#b3cde3","pT"= "#8c96c6","pY"= "#8856a7" ,"pH"= "#810f7c","pR"= "#210320"))+
+   theme(axis.title.x = element_blank(), panel.background =  element_blank(), axis.line = element_line())+
+   ylab("Avergage number of p-sites [%]")
+```
+
+Combine all graphs in one figure
+
+```{r}
+
+ggarrange(ggarrange(pArg.plot, pST.plot, pY.plot, labels = c("a)", "b)", "c)"), ncol = 3),
+          ggarrange(Peptide.plot, psite.dis, labels = c("d)", "e)"), ncol=2),
+          nrow = 2)
+```

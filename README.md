@@ -34,5 +34,5 @@ We have added a project file for convenience, so you can double-click it to open
 
 ### Obtain the data
 No data (MaxQuant output .txt files) is available in this repository, it needs to be downloaded from the Pride archive.
-Download the MQ_output_txt.zip file from the and extract it in the same directory as the markdown documents. The scripts will locate the required .txt file in the subfolder and load all necessary libraries. 
+From there, obtain the MQ_output_txt.zip file and extract it in the same directory as the markdown documents. The scripts will locate the required .txt file in the subfolder and load all necessary libraries. 
 Second, open the .Rmd file you are interested in and 'knit' the document. The scripts will generate the plots used in the above mentioned paper. 

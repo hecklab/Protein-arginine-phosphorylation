@@ -16,7 +16,17 @@ Nadine Prust<sup>1,2</sup>,  Pieter C. van Breugel<sup>1,2</sup> and Simone Leme
 ## Instructions for use
 
 ### Environment
-The code is embedded in RMarkdown documents, one per analysis. RStudio (https://rstudio.com, no affiliation) is a convenient environment for "knitting" these documents, to create HTML or PDF output.
+The code is embedded in RMarkdown documents, one per analysis. RStudio (https://rstudio.com, no affiliation) is a convenient environment for "knitting" these documents, to create HTML or PDF output. The following packages need to be installed in R:
+
+* tidyverse
+* ggpubr
+* reshape2
+* stringr
+* colorspace
+* ggforce
+* RColorbrewer
+* VennDiagram
+* psych
 
 ### Obtain the markdown documents
 To obtain these documents, use git (available in RStudio as well) to download ('clone') the documents, or simply download the files as a zip file. The URL for cloning, or the link to download the zip, are availabe under the green "Code" button above the file listing.

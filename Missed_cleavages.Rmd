@@ -1,7 +1,7 @@
 ---
 title: "Missed cleavages"
 author: "Nadine Prust"
-date: "4/20/2021"
+date: "10/28/2021"
 output:
   html_document:
     df_print: paged
@@ -11,7 +11,7 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Analysis of missed cleavages of pArg, pHis and pSTY
+## Analysis of missed cleavages of pArg, pHis and pSTY 
 
 All necessary data is deposited on Pride and can be downloaded. The used files for this script can be found in the MQ_output_txt.zip file. Add the MQ_output_txt folder then to your project folder to access the required data. 
 
@@ -60,72 +60,61 @@ pSTY <- pRHSTY.exp7[pRHSTY.exp7$Amino.acid != "R" & pRHSTY.exp7$Amino.acid != "H
 pSTY.classI <- pSTY[pSTY$Localization.prob >= 0.75,]
 ```
 
-Calulcate occurence of 0,1,2 or 3 missed cleavages for pArg, pHis and pSTY
+Calculate occurrence of 0,1,2 or 3 missed cleavages for pArg, pHis and pSTY
 
 ```{r}
 #pArg
-missed.cleavages.pArg <- rbind.data.frame( table(pArg$missed.cleavages==0),
-                                           table(pArg$missed.cleavages == 1),
-                                           table(pArg$missed.cleavages== 2), 
-                                           table(pArg$missed.cleavages== 3))
-#set to 0 if if it doesn't occure
-missed.cleavages.pArg <- ifelse(missed.cleavages.pArg[[1]] == missed.cleavages.pArg[[2]],
-                                                  0, missed.cleavages.pArg[[2]])
-missed.cleavages.pArg <- cbind.data.frame(c(0,1,2,3),missed.cleavages.pArg)
+calculate_missed_cleavages <- function(df, AA){
+  
+  a <- rbind.data.frame(cbind("missed.cleavges" = 0, "Number"= nrow(df[df$missed.cleavages==0,]), 
+                              "Frequency" = round(nrow(df[df$missed.cleavages==0,])/nrow(df)*100,1), 'aa' = AA),
+                        cbind("missed.cleavges" = 1, "Number"= nrow(df[df$missed.cleavages==1,]),
+                              "Frequency" = round(nrow(df[df$missed.cleavages==1,])/nrow(df)*100,1),'aa' = AA),
+                        cbind("missed.cleavges" = 2, "Number"= nrow(df[df$missed.cleavages==2,]),
+                              "Frequency" =  round(nrow(df[df$missed.cleavages==2,])/nrow(df)*100,1),'aa' = AA),
+                        cbind("missed.cleavges" = 3, "Number"= nrow(df[df$missed.cleavages==3,]),
+                              "Frequency" = round(nrow(df[df$missed.cleavages==3,])/nrow(df)*100,1),'aa' = AA))
+}
 
-colnames(missed.cleavages.pArg) <- c("Missed.cleavges", "Frequency")
-#calculate percantage of the different missed cleavages
-missed.cleavages.pArg$pc <- missed.cleavages.pArg$Frequency/sum(missed.cleavages.pArg$Frequency)*100
-
-missed.cleavages.pArg$aa <- "R"
+missed.cleavages.pArg <- calculate_missed_cleavages(pArg, "R")
+missed.cleavages.pArg.classI <- calculate_missed_cleavages(pArg.classI, "R") 
 
 #pHis
-missed.cleavages.pHis <- rbind.data.frame( table(pHis$missed.cleavages==0),
-                                           table(pHis$missed.cleavages == 1),
-                                           table(pHis$missed.cleavages== 2),
-                                           table(pHis$missed.cleavages== 3))
-missed.cleavages.pHis <- ifelse(missed.cleavages.pHis[[1]] == missed.cleavages.pHis[[2]],
-                                0, missed.cleavages.pHis[[2]])
-missed.cleavages.pHis <- cbind.data.frame(c(0,1,2,3),missed.cleavages.pHis)
-
-colnames(missed.cleavages.pHis) <- c("Missed.cleavges", "Frequency")
-
-missed.cleavages.pHis$pc <- missed.cleavages.pHis$Frequency/sum(missed.cleavages.pHis$Frequency)*100
-
-missed.cleavages.pHis$aa <- "H"
-
+missed.cleavages.pHis <- calculate_missed_cleavages(pHis, "H")
+missed.cleavages.pHis.classI <- calculate_missed_cleavages(pHis.classI, "H")
 #pSTY
 
-missed.cleavages.pSTY <- rbind.data.frame( table(pSTY$missed.cleavages==0),
-                                           table(pSTY$missed.cleavages == 1),
-                                           table(pSTY$missed.cleavages== 2),
-                                           table(pSTY$missed.cleavages== 3))
-missed.cleavages.pSTY <- ifelse(missed.cleavages.pSTY[[1]] == missed.cleavages.pSTY[[2]],
-                                0, missed.cleavages.pSTY[[2]])
-missed.cleavages.pSTY <- cbind.data.frame(c(0,1,2,3),missed.cleavages.pSTY)
-
-colnames(missed.cleavages.pSTY) <- c("Missed.cleavges", "Frequency")
-
-missed.cleavages.pSTY$pc <- missed.cleavages.pSTY$Frequency/sum(missed.cleavages.pSTY$Frequency)*100
-
-missed.cleavages.pSTY$aa <- "STY"
+missed.cleavages.pSTY <- calculate_missed_cleavages(pSTY, "STY")
+missed.cleavages.pSTY.classI <- calculate_missed_cleavages(pSTY.classI, "STY")
 
 #combine all information in one table
 missed.cleavages.overview <- rbind.data.frame(missed.cleavages.pArg, missed.cleavages.pHis, missed.cleavages.pSTY)
-missed.cleavages.overview$Missed.cleavges <- as.character(missed.cleavages.overview$Missed.cleavges)
+missed.cleavages.overview$missed.cleavges <- as.character(missed.cleavages.overview$missed.cleavges)
+missed.cleavages.overview$type <- "all"
+
+missed.cleavages.overview.classI <- rbind.data.frame(missed.cleavages.pArg.classI, missed.cleavages.pHis.classI, missed.cleavages.pSTY.classI)
+missed.cleavages.overview.classI$missed.cleavges <- as.character(missed.cleavages.overview.classI$missed.cleavges)
+missed.cleavages.overview.classI$type <- "classI"
+
+
+overview <- rbind.data.frame(missed.cleavages.overview, missed.cleavages.overview.classI)
 ```
 
 Plot distribution of missed cleavages for pHis, pArgg and pSTY
 
 ```{r}
 pal <- rev(heat_hcl(4,h=c(0,-100), l=c(75,40), c=c(40,80), power=1))
-missed.cleavages.overview %>%
-  mutate(Missed.cleavges = fct_relevel(Missed.cleavges, "3","2","1", "0" ))%>%
-  ggplot(aes(x=aa, y=pc, fill=Missed.cleavges))+
+
+  overview %>%
+  mutate(missed.cleavges = fct_relevel(missed.cleavges, "3","2","1", "0" ))%>%
+  mutate(Frequency = as.numeric(Frequency)) %>%
+  ggplot(aes(x=aa, y=Frequency, fill=missed.cleavges))+
   geom_bar(stat = "identity")+
   scale_fill_manual(values = pal)+
   theme_classic()+
   ylab("Number of peptides [%]")+
-  xlab("Number of missed cleavages")
+  xlab("Number of missed cleavages")+
+  facet_wrap(~type)
+
 
 ```

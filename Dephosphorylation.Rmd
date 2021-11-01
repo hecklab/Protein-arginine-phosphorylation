@@ -381,7 +381,7 @@ STp1.peptides <- average_numbers(evidence.Stp1.1, evidence.Stp1.2, evidence.Stp1
 Calculate the average of identified peptides, phosphopeptides in percentage of identified phosphopeptides
 
 ```{r}
-Peptide.number.comp <- rbind.data.frame(cbind("Sample"= "Ctrl","ID" = "Peptides", "Average" = mean(Ctrl.peptides$No.peptides), 
+Peptide.number.comp <- rbind.data.frame(cbind("Sample"= "Ctrl","ID" = "Peptides", "Average" =  mean(Ctrl.peptides$No.peptides), 
                                               "SD" =sd(Ctrl.peptides$No.peptides)),
                                         cbind("Sample" = "Ctrl", "ID" = "Phosphopeptides", 
                                               "Average" = mean(Ctrl.peptides$No.phosphopeptides), 
@@ -461,7 +461,7 @@ psites.extraction <- function(df1, df2, df3, SAMPLE){
     )
     c.dis$fraction <- c.dis$count / sum(c.dis$count)*100
   d <- rbind.data.frame(a.dis, b.dis, c.dis)
-      d<- d %>% group_by(category) %>% mutate("Average" = mean(count), "SD" = sd(count), 
+      d<- d %>% group_by(category) %>% mutate("Average" = round(mean(count),0), "SD" = sd(count), 
                                               "Avg.fraction" = mean(fraction), "SD.fraction" = sd(fraction))
     
     d<- d[!duplicated(d$category), c("category", "Average", "SD", "Avg.fraction", "SD.fraction")]

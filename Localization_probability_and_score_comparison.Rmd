@@ -10,7 +10,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Comparison of Andromeda localization probability and Andromeda score for endogenous peptides that were either exclusively identified being phosphorylated on arginine that were also identified  to be phosphorylated on H,S,T, or Y. and pArg peptides 
+## Comparison of Andromeda localization probability and Andromeda score for endogenous peptides that were either exclusively identified being phosphorylated on arginine that were also identified  to be phosphorylated on H,S,T, or Y. and pArg peptides
 
 All necessary data is deposited on Pride and can be downloaded. The used files for this script can be found in the MQ_output_txt.zip file. Add the MQ_output_txt folder then to your project folder to access the required data.
 
@@ -24,7 +24,7 @@ Read Phospho (RHSTY).txt from combined MaxQuant (v1.6.3.4) search and read unipr
 ```{r}
 
 phospho_RHSTY <- read.delim("MQ_output_txt/Endogenous_data/LFQ_Saureus/txt/Phospho (RHSTY)Sites_exp7.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
-uniprotname <- read.delim("MQ_output_txt/Endogenous_data/LFQ_Saureus/txt/uniprot_list_pRHSTY.txt", header = TRUE, stringsAsFactors = FALSE)
+uniprotname <- read.delim("MQ_output_txt/Endogenous_data/LFQ_Saureus/txt/uniprot-USA300.txt", header = TRUE, stringsAsFactors = FALSE)
 ```
 
 Extract important columns and filter data
@@ -50,7 +50,7 @@ pRHSTY.aureus <- pRHSTY.aureus[pRHSTY.aureus$Potential.contaminant != "+",]
 pRHSTY.aureus$ID <- paste(pRHSTY.aureus$Protein, pRHSTY.aureus$Amino.acid, pRHSTY.aureus$Positions.within.proteins,
                         sep = ",")
 
-pRHSTY.aureus$Sequence <- gsub("\\(\\d*\\.?\\d*\\)","", pRHSTY.exp7$Phospho..RHSTY..Probabilities)
+pRHSTY.aureus$Sequence <- gsub("\\(\\d*\\.?\\d*\\)","", pRHSTY.aureus$Phospho..RHSTY..Probabilities)
 pRHSTY.aureus <- pRHSTY.aureus[pRHSTY.aureus$Number.of.Phospho..RHSTY. != "",]
 
 ```
@@ -129,7 +129,6 @@ combined.unique <- combined[which(!duplicated(combined$ID.x)),]
 combined.doubly.phosphorylated <- combined[combined$Number.of.Phospho..RHSTY..x >= 2,]
 
 identifier <- c(combined$ID.x, combined$ID.y)
-test2 <-as.data.frame(gsub(",.*", "", identifier$`combined$ID.x`))
 
 multiple.ppeptide <- pRHSTY.aureus[pRHSTY.aureus$ID %in% identifier,]
 multiple.ppeptide$ID.aa <- ifelse(multiple.ppeptide$Amino.acid == "R", "R", "HSTY")
@@ -282,7 +281,7 @@ Localization %>% arrange(AA) %>%
 
 ```
 
-Combin plots
+Combine plots
 
 ```{r}
 ggarrange(localization.plot, Score.plot, labels = c("a)", "b)"), ncol = 2, nrow = 1)

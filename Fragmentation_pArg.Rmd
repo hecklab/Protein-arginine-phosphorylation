@@ -28,7 +28,7 @@ for the analysis of sequence coverage, Andromeda score and localization probabil
 
 ```{r}
 msms.etd <- read.delim("MQ_output_txt/Synthetic_peptides/Fragmentation/txt/msms.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
-evidence.etd <- read.delim("MQ_output_txt/Synthetic_peptides/Fragmentation/txt/evidence.etd.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+evidence.etd <- read.delim("MQ_output_txt/Synthetic_peptides/Fragmentation/txt/evidence.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
 
 ```
 
@@ -569,11 +569,7 @@ Neutral_loss <- function(HCD, ETD, ETHCD,
   numbers$category <- factor(numbers$category , levels = c("Triple loss", "Double loss", "Single loss", "No loss"))
  
   
-  write.csv(Numbers_Arg.HCD, numbers_Arg_name.HCD )
-  write.csv(Numbers_Arg.ETD, numbers_Arg_name.ETD )
-  write.csv(Numbers_Arg.ETHCD, numbers_Arg_name.ETHCD )
-  
-  write.csv(numbers, barchart_name)
+
   return(numbers)
 }
 
@@ -705,13 +701,6 @@ Neutral_loss.enodgenous <- function(output_Ser, output_Thr, output_Tyr, output_H
   numbers$category <- as.factor(numbers$category)
   numbers$category <- factor(numbers$category , levels = c("Triple loss", "Double loss", "Single loss", "No loss"))
  
-  #writes all tables
-  write.csv(Numbers_Ser, numbers_Ser_name )
-  write.csv(Numbers_Thr, numbers_Thr_name )
-  write.csv(Numbers_Tyr, numbers_Tyr_name)
-  write.csv(Numbers_His, numbers_His_name)
-  write.csv(Numbers_Arg, numbers_Arg_name )
-  write.csv(numbers, barchart_name)
  return(numbers)
 }
 

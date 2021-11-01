@@ -1,0 +1,615 @@
+---
+title: "Comparison pHSTY and pRHSTY MaxQuant searches"
+author: "Nadine Prust"
+date: "10/28/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Compare the pHSTY and pRHSTY MaxQuant searches to identify where pArg sites are originating from
+
+All necessary data is deposited on Pride and can be downloaded. The used files for this script can be found in the MQ_output_txt.zip file. Add the MQ_output_txt folder then to your project folder to access the required data. 
+
+```{r}
+library(dplyr)
+library(magrittr)
+library(tibble)
+library(stringr)
+library(ggplot2)
+library(ggpubr)
+library(forcats)
+library(VennDiagram)
+library(reshape2)
+```
+
+## 
+
+```{r }
+Identification.pRHSTY <- function(df){
+  a <- read.delim(df, header = TRUE, stringsAsFactors = FALSE, dec = ".") %>%
+    purrr::when(is.character(.$Reverse) ~ filter(., Reverse != "+"), ~.) %>% filter(Potential.contaminant != "+") %>%
+    mutate("ID"= paste(.$Protein, .$Amino.acid, .$Positions.within.proteins,
+                        sep = ",")) %>%
+     mutate("ID2"= paste(.$Protein, .$Amino.acid, .$Positions.within.proteins, .$Best.localization.scan.number,
+                        sep = ",")) %>%
+    
+    #log transform data
+  mutate_at(vars(matches("Intensity.[a-zA-Z]{3}._\\d$")), log2) %>%
+    #change infinity values to NA
+  mutate_at(vars(matches("Intensity.[a-zA-Z]{3}._\\d$")), list(~ ifelse( is.infinite(.), NA, .))) %>%
+    #median normalization
+  mutate_at(vars(matches("Intensity.[a-zA-Z]{3}._\\d$")),list(~ .- median(., na.rm = TRUE))) %>%
+    rowwise()  %>%
+    dplyr::mutate( Number.NA = sum(across(c(grep("Intensity.[a-zA-Z]{3}._\\d$", colnames(.))),list(~sum(is.na(.)))))) 
+  
+  
+  
+  a$Sequence <- gsub("\\(\\d*\\.?\\d*\\)","", a$Phospho..RHSTY..Probabilities)
+  a$missed.cleavages <-str_count(a$Sequence, "K|R")-1
+  a$before.missed.cleavage <- str_extract(a$Sequence, "^(.*?R|K)")
+  a$after.missed.cleavage <- str_extract(a$Sequence, "R.*|K.*")
+  
+  a$Sequence.adj <- ifelse(a$missed.cleavages <=0 , a$Sequence, NA)
+  b<-  a[which(str_count(a$before.missed.cleavage) >= str_count(a$after.missed.cleavage)) ,"before.missed.cleavage"]   #extract sequences longer than 4 amino acids
+  c <- a[which(str_count(a$after.missed.cleavage) >= str_count(a$before.missed.cleavage)) ,"after.missed.cleavage"]
+  
+  a$Sequence.adj <- ifelse(a$before.missed.cleavage %in% b$before.missed.cleavage,
+                           a$before.missed.cleavage, a$Sequence.adj)
+  a$Sequence.adj <- ifelse(a$after.missed.cleavage %in% c$after.missed.cleavage, a$after.missed.cleavage, a$Sequence.adj)
+  a$Sequence.adj <- ifelse(is.na(a$Sequence.adj), a$after.missed.cleavage, a$Sequence.adj)
+  
+  return(a) 
+ }
+
+
+pRHSTY.SdrE <- Identification.pRHSTY("MQ_output_txt/Endogenous_data/SdrE/pRHSTY/txt/Phospho (RHSTY)Sites_SdrE.txt")
+pRHSTY.Stk1 <- Identification.pRHSTY("MQ_output_txt/Endogenous_data/Stk1/pRHSTY/txt/Phospho (RHSTY)Sites_Stk1.txt")
+pRHSTY.Stp1 <- Identification.pRHSTY("MQ_output_txt/Endogenous_data/Stp1/pRHSTY/txt/Phospho (RHSTY)Sites_Stp1.txt")
+
+pRHSTY.SdrE.short <- pRHSTY.SdrE %>% select(Protein, Amino.acid, Positions.within.proteins, ID, ID2, Number.of.Phospho..RHSTY.,
+                                            Localization.prob, Best.localization.evidence.ID, Best.localization.raw.file,
+                                            Best.localization.scan.number, Sequence.window, missed.cleavages,
+                                            Sequence, before.missed.cleavage, after.missed.cleavage, Sequence.adj)
+colnames(pRHSTY.SdrE.short) <-c("Protein", "Amino.acid", "Positions.within.proteins", "ID", "ID2", "Number.of.Phospho", 
+                               "Localization.prob", "Best.localization.evidence.ID", 
+                               "Best.localization.raw.file",
+                               "Best.localization.scan.number", "Sequence.window","missed.cleavages",
+                               "Sequence", "before.missed.cleavage", "after.missed.cleavage", "Sequence.adj")
+
+
+pRHSTY.SdrE.classI <- pRHSTY.SdrE.short[pRHSTY.SdrE.short$Localization.prob >= 0.75,]
+
+Identification.pHSTY <- function(df){
+  a <- read.delim(df, header = TRUE, stringsAsFactors = FALSE, dec = ".") %>%
+    purrr::when(is.character(.$Reverse) ~ filter(., Reverse != "+"), ~.) %>% filter(Potential.contaminant != "+") %>%
+    mutate("ID"= paste(.$Protein, .$Amino.acid, .$Positions.within.proteins,
+                        sep = ",")) %>%
+     mutate("ID2"= paste(.$Protein, .$Amino.acid, .$Positions.within.proteins, .$Best.localization.scan.number,
+                        sep = ",")) %>%
+    
+    #log transform data
+  mutate_at(vars(matches("Intensity.[a-zA-Z]{3}._\\d$")), log2) %>%
+    #change infinity values to NA
+  mutate_at(vars(matches("Intensity.[a-zA-Z]{3}._\\d$")), list(~ ifelse( is.infinite(.), NA, .))) %>%
+    #median normalization
+  mutate_at(vars(matches("Intensity.[a-zA-Z]{3}._\\d$")),list(~ .- median(., na.rm = TRUE))) %>%
+    rowwise()  %>%
+    dplyr::mutate( Number.NA = sum(across(c(grep("Intensity.[a-zA-Z]{3}._\\d$", colnames(.))),list(~sum(is.na(.))))))
+    
+    a$Sequence <- gsub("\\(\\d*\\.?\\d*\\)","", a$Phospho..HSTY..Probabilities)
+    a$missed.cleavages <-str_count(a$Sequence, "K|R")-1
+    a$before.missed.cleavage <- str_extract(a$Sequence, "^(.*?R|K)")
+    a$after.missed.cleavage <- str_extract(a$Sequence, "R.*|K.*")
+    
+    a$Sequence.adj <- ifelse(a$missed.cleavages <=0 , a$Sequence, NA)
+    b<-  a[which(str_count(a$before.missed.cleavage) >= str_count(a$after.missed.cleavage)) ,"before.missed.cleavage"]   #extract sequences longer than 4 amino acids
+    c <- a[which(str_count(a$after.missed.cleavage) >= str_count(a$before.missed.cleavage)) ,"after.missed.cleavage"]
+    
+    a$Sequence.adj <- ifelse(a$before.missed.cleavage %in% b$before.missed.cleavage,
+                             a$before.missed.cleavage, a$Sequence.adj)
+    a$Sequence.adj <- ifelse(a$after.missed.cleavage %in% c$after.missed.cleavage, a$after.missed.cleavage, a$Sequence.adj)
+    a$Sequence.adj <- ifelse(is.na(a$Sequence.adj), a$after.missed.cleavage, a$Sequence.adj)
+    
+    return(a)        
+  
+}
+
+pHSTY.SdrE <- Identification.pHSTY("MQ_output_txt/Endogenous_data/SdrE/pHSTY/txt/Phospho (HSTY)Sites_SdrE.txt")
+pHSTY.Stk1 <- Identification.pHSTY("MQ_output_txt/Endogenous_data/Stk1/pHSTY/txt/Phospho (HSTY)Sites_Stk1.txt")
+pHSTY.Stp1 <- Identification.pHSTY("MQ_output_txt/Endogenous_data/Stp1/pHSTY/txt/Phospho (HSTY)Sites_Stp1.txt")
+
+
+
+pHSTY.SdrE.short <- pHSTY.SdrE %>% select(Protein, Amino.acid, Positions.within.proteins, ID, ID2, Number.of.Phospho..HSTY.,
+                                            Localization.prob, Best.localization.evidence.ID, Best.localization.raw.file,
+                                            Best.localization.scan.number, Sequence.window, missed.cleavages,
+                                            Sequence, before.missed.cleavage, after.missed.cleavage, Sequence.adj)
+
+colnames(pHSTY.SdrE.short) <-c("Protein", "Amino.acid", "Positions.within.proteins", "ID", "ID2", "Number.of.Phospho", 
+                               "Localization.prob", "Best.localization.evidence.ID", 
+                               "Best.localization.raw.file",
+                               "Best.localization.scan.number", "Sequence.window","missed.cleavages",
+                               "Sequence", "before.missed.cleavage", "after.missed.cleavage", "Sequence.adj")
+
+pHSTY.SdrE.classI <- pHSTY.SdrE.short[pHSTY.SdrE.short$Localization.prob >= 0.75,]
+
+#Overlapping sites between pRHSTY and pHSTY based on ID (Protein, AA, position)
+overlap.SdrE <- pRHSTY.SdrE.short[pRHSTY.SdrE.short$ID %in% pHSTY.SdrE.short$ID,]
+overlap.ClassI.SdrE <- pRHSTY.SdrE.classI[pRHSTY.SdrE.classI$ID %in% pHSTY.SdrE.classI$ID,]
+
+#Unique sites only identified within pRHSTY or pHSTY based on ID
+Unique.pRHSTY <- pRHSTY.SdrE.short[!(pRHSTY.SdrE.short$ID %in% pHSTY.SdrE.short$ID),]
+Unique.pRHSTY$Seq.ID <- paste(Unique.pRHSTY$Sequence.adj, Unique.pRHSTY$Best.localization.scan.number, sep = ",") #add Sequence ID (Sequence + scan number)
+Unique.pHSTY <- pHSTY.SdrE.short[!(pHSTY.SdrE.short$ID %in% pRHSTY.SdrE.short$ID ),]
+Unique.pHSTY$Seq.ID <- paste(Unique.pHSTY$Sequence.adj, Unique.pHSTY$Best.localization.scan.number, sep = ",") #add Sequence ID (Sequence + scan number)
+
+Unique.pRHSTY.ClassI <- pRHSTY.SdrE.classI[!(pRHSTY.SdrE.classI$ID %in% pHSTY.SdrE.classI$ID),]
+Unique.pRHSTY.ClassI$Seq.ID <- paste(Unique.pRHSTY.ClassI$Sequence.adj, Unique.pRHSTY.ClassI$Best.localization.scan.number, sep = ",") #add Sequence ID (Sequence + scan number)
+
+Unique.pHSTY.ClassI <- pHSTY.SdrE.classI[!(pHSTY.SdrE.classI$ID %in% pRHSTY.SdrE.classI$ID ),]
+Unique.pHSTY.ClassI$Seq.ID <- paste(Unique.pHSTY.ClassI$Sequence.adj, Unique.pHSTY.ClassI$Best.localization.scan.number, sep = ",") #add Sequence ID (Sequence + scan number)
+
+#Identify overlapping sequences with in Unique sites based on the adjusted sequence that takes missed cleavages into account
+Sequence.overlap.pRHSTY <- Unique.pRHSTY[(Unique.pRHSTY$Sequence.adj %in% Unique.pHSTY$Sequence.adj),]
+Sequence.overlap.pHSTY <- Unique.pHSTY[(Unique.pHSTY$Sequence.adj %in% Unique.pRHSTY$Sequence.adj),]
+
+ClassI.Sequence.overlap.pRHSTY <- Unique.pRHSTY.ClassI[(Unique.pRHSTY.ClassI$Sequence.adj %in% Unique.pHSTY.ClassI$Sequence.adj),]
+ClassI.Sequence.overlap.pHSTY <- Unique.pHSTY.ClassI[(Unique.pHSTY.ClassI$Sequence.adj %in% Unique.pRHSTY.ClassI$Sequence.adj),]
+
+
+#match unique.pHSTY based on sequence to pRHSTY
+
+Sequence.overlap.pRHSTY.classI <- Unique.pRHSTY.ClassI[Unique.pRHSTY.ClassI$Sequence.adj %in% Unique.pHSTY.ClassI$Sequence.adj,]
+Sequence.overlap.pHSTY.classI <- Unique.pHSTY.ClassI[Unique.pHSTY.ClassI$Sequence.adj %in% Unique.pRHSTY.ClassI$Sequence.adj,]
+
+Sequence.overlap.unique.SdrE <- inner_join(Unique.pRHSTY, Unique.pHSTY, by= "Sequence.adj") # peptidesid in both searches
+Sequence.overlap.unique.SdrE.classI <- inner_join(Unique.pRHSTY.ClassI, Unique.pHSTY.ClassI, by= "Sequence.adj") # peptidesid in both searches
+
+Sequence.overlap.unique.SdrE %<>% select(Sequence.adj,Sequence.x, Sequence.y, Protein.x, Amino.acid.x, Amino.acid.y, Positions.within.proteins.x,
+                                         Positions.within.proteins.y, Localization.prob.x, Localization.prob.y,
+                                         ID.x, ID.y, ID2.x, ID2.y, Seq.ID.x, Seq.ID.y, missed.cleavages.x,missed.cleavages.y,
+                                         Best.localization.evidence.ID.x, Best.localization.evidence.ID.y,
+                                         Best.localization.raw.file.x, Best.localization.raw.file.y,
+                                         Best.localization.scan.number.x, Best.localization.scan.number.y, Sequence.window.x,
+                                         Sequence.window.y, before.missed.cleavage.x, before.missed.cleavage.y,
+                                         after.missed.cleavage.x, after.missed.cleavage.y)
+
+Sequence.overlap.unique.SdrE.classI %<>% select(Sequence.adj,Sequence.x, Sequence.y, Protein.x, Amino.acid.x, Amino.acid.y, Positions.within.proteins.x,
+                                         Positions.within.proteins.y, Localization.prob.x, Localization.prob.y,
+                                         ID.x, ID.y, ID2.x, ID2.y, Seq.ID.x, Seq.ID.y, missed.cleavages.x,missed.cleavages.y,
+                                         Best.localization.evidence.ID.x, Best.localization.evidence.ID.y,
+                                         Best.localization.raw.file.x, Best.localization.raw.file.y,
+                                         Best.localization.scan.number.x, Best.localization.scan.number.y, Sequence.window.x,
+                                         Sequence.window.y, before.missed.cleavage.x, before.missed.cleavage.y,
+                                         after.missed.cleavage.x, after.missed.cleavage.y)
+
+Sequence.overlap.unique.SdrE$same.scan <- ifelse(Sequence.overlap.unique.SdrE$Best.localization.scan.number.x == Sequence.overlap.unique.SdrE$Best.localization.scan.number.y &
+                                                   Sequence.overlap.unique.SdrE$Best.localization.raw.file.x == Sequence.overlap.unique.SdrE$Best.localization.raw.file.y,
+                                                 "YES", "NO")
+Sequence.overlap.unique.SdrE.classI$same.scan <- ifelse(Sequence.overlap.unique.SdrE.classI$Best.localization.scan.number.x == Sequence.overlap.unique.SdrE.classI$Best.localization.scan.number.y &
+                                                          Sequence.overlap.unique.SdrE.classI$Best.localization.raw.file.x == Sequence.overlap.unique.SdrE.classI$Best.localization.raw.file.y,
+                                                 "YES", "NO")
+
+Sequence.overlap.unique.SdrE.classI <- Sequence.overlap.unique.SdrE[Sequence.overlap.unique.SdrE$Localization.prob.x >= 0.75 &
+                                                                      Sequence.overlap.unique.SdrE$Localization.prob.y >= 0.75, ]
+same.scan.SdrE <- Sequence.overlap.unique.SdrE[Sequence.overlap.unique.SdrE$same.scan == "YES",]
+not.same.scan.SdrE <- Sequence.overlap.unique.SdrE[Sequence.overlap.unique.SdrE$same.scan == "NO",]
+#Identifying peptides exclusively identified in one search
+Sequence.unique.pRHSTY <- Unique.pRHSTY[!(Unique.pRHSTY$Sequence.adj %in% Unique.pHSTY$Sequence.adj),]
+Sequence.unique.pRHSTY.classI <- Unique.pRHSTY.ClassI[!(Unique.pRHSTY.ClassI$Sequence.adj %in% Unique.pHSTY.ClassI$Sequence.adj),]
+Sequence.unique.pHSTY <- Unique.pHSTY[!(Unique.pHSTY$Sequence.adj %in% Unique.pRHSTY$Sequence.adj),]
+Sequence.unique.pHSTY.classI <- Unique.pHSTY.ClassI[!(Unique.pHSTY.ClassI$Sequence.adj %in% Unique.pRHSTY.ClassI$Sequence.adj),]
+
+same.scan.prob <- data.frame(category = c("ClassI", "ClassII and III"),
+                             pRHSTY= c(nrow(same.scan.SdrE[same.scan.SdrE$Localization.prob.x >= 0.75,]),
+                                       nrow(same.scan.SdrE[same.scan.SdrE$Localization.prob.x <= 0.75,])),
+                             pHSTY = c(nrow(same.scan.SdrE[same.scan.SdrE$Localization.prob.y >= 0.75,]),
+                                       nrow(same.scan.SdrE[same.scan.SdrE$Localization.prob.y <= 0.75,])))
+
+
+```
+##Graphs
+
+```{r}
+
+names.ven <-  c( "pHSTY", "pRHSTY")
+
+SdrE.match.Venn <- 
+  venn.diagram(
+    x = list(
+  pHSTY = pHSTY.SdrE.short$ID,
+  pRHSTY = pRHSTY.SdrE.short$ID
+  ) ,
+  category.names = names.ven,
+  filename = NULL,
+  output=TRUE, 
+  col=c("pHSTY"=  "#b3cde3","pRHSTY"= "#8c96c6"),
+  fill = c("pHSTY" ="#b3cde3", "pRHSTY"= "#8c96c6"))
+
+
+SdrE.match.ClassI.Venn <- 
+  venn.diagram(
+    x = list(
+      
+      pHSTY = pHSTY.SdrE.classI$ID,
+      pRHSTY = pRHSTY.SdrE.classI$ID
+      
+    ) ,
+    category.names = names.ven,
+    filename = NULL,
+    output=TRUE, 
+    force.unique = FALSE,
+    col=c("pHSTY"=  "#b3cde3","pRHSTY"= "#8c96c6"),
+    fill = c("pHSTY" = "#b3cde3", "pRHSTY"= "#8c96c6") 
+  )
+
+
+SdrE.unique.Venn <- 
+  venn.diagram(
+    x=list(
+      pHSTY = Unique.pHSTY$Sequence.adj,
+      pRHSTY = Unique.pRHSTY$Sequence.adj) ,
+    category.names = names.ven,
+    filename = NULL,
+    output=TRUE, 
+    force.unique = FALSE,
+    col=c("pHSTY"=  "#b3cde3","pRHSTY"= "#8c96c6"),
+    fill = c("pHSTY" = "#b3cde3", "pRHSTY"= "#8c96c6")
+  )
+
+SdrE.unique.classI.Venn <- 
+  venn.diagram(
+    x=list(
+      pHSTY = Unique.pHSTY.ClassI$Sequence.adj,
+      pRHSTY = Unique.pRHSTY.ClassI$Sequence.adj) ,
+    category.names = names.ven,
+    filename = NULL,
+    output=TRUE, 
+    force.unique = FALSE,
+    col=c("pHSTY"=  "#b3cde3","pRHSTY"= "#8c96c6"),
+    fill = c("pHSTY" = "#b3cde3", "pRHSTY"= "#8c96c6")
+  )
+
+
+
+SdrE.same.scan.Venn <- 
+  venn.diagram(
+    x=list(
+      pHSTY = Sequence.overlap.pHSTY$Seq.ID,
+      pRHSTY = Sequence.overlap.pRHSTY$Seq.ID),
+    category.names = names.ven,
+    filename = NULL,
+    output=TRUE, 
+    col=c("pHSTY"=  "#b3cde3","pRHSTY"= "#8c96c6"),
+    fill = c("pHSTY" = "#b3cde3", "pRHSTY"= "#8c96c6")
+  )
+
+SdrE.same.scan.classIVenn <- 
+  venn.diagram(
+    x=list(
+      pHSTY = Sequence.overlap.pHSTY.classI$Seq.ID,
+      pRHSTY = Sequence.overlap.pRHSTY.classI$Seq.ID),
+    category.names = names.ven,
+    filename = NULL,
+    output=TRUE, 
+    force.unique = FALSE,
+    col=c("pHSTY"=  "#b3cde3","pRHSTY"= "#8c96c6"),
+    fill = c("pHSTY" = "#b3cde3", "pRHSTY"= "#8c96c6")
+  )
+
+
+SdrE.distribution <- data.frame(
+  category=c("pS", "pT", "pY", "pH", "pR"),
+  pRHSTY=c(nrow(pRHSTY.SdrE[pRHSTY.SdrE$Amino.acid == "S",]), nrow(pRHSTY.SdrE[pRHSTY.SdrE$Amino.acid == "T",]), 
+          nrow(pRHSTY.SdrE[pRHSTY.SdrE$Amino.acid == "Y",]), nrow(pRHSTY.SdrE[pRHSTY.SdrE$Amino.acid == "H",]),
+          nrow(pRHSTY.SdrE[pRHSTY.SdrE$Amino.acid == "R",])),
+  classI.pRHSTY=c(nrow(pRHSTY.SdrE.classI[pRHSTY.SdrE.classI$Amino.acid == "S",]), 
+          nrow(pRHSTY.SdrE.classI[pRHSTY.SdrE.classI$Amino.acid == "T",]), 
+          nrow(pRHSTY.SdrE.classI[pRHSTY.SdrE.classI$Amino.acid == "Y",]), 
+          nrow(pRHSTY.SdrE.classI[pRHSTY.SdrE.classI$Amino.acid == "H",]),
+          nrow(pRHSTY.SdrE.classI[pRHSTY.SdrE.classI$Amino.acid == "R",])),
+  pHSTY=c(nrow(pHSTY.SdrE[pHSTY.SdrE$Amino.acid == "S",]), nrow(pHSTY.SdrE[pHSTY.SdrE$Amino.acid == "T",]), 
+          nrow(pHSTY.SdrE[pHSTY.SdrE$Amino.acid == "Y",]), nrow(pHSTY.SdrE[pHSTY.SdrE$Amino.acid == "H",]),
+          nrow(pHSTY.SdrE[pHSTY.SdrE$Amino.acid == "R",])),
+  ClassI.pHSTY=c(nrow(pHSTY.SdrE.classI[pHSTY.SdrE.classI$Amino.acid == "S",]), 
+          nrow(pHSTY.SdrE.classI[pHSTY.SdrE.classI$Amino.acid == "T",]), 
+          nrow(pHSTY.SdrE.classI[pHSTY.SdrE.classI$Amino.acid == "Y",]), 
+          nrow(pHSTY.SdrE.classI[pHSTY.SdrE.classI$Amino.acid == "H",]),
+          nrow(pHSTY.SdrE.classI[pHSTY.SdrE.classI$Amino.acid == "R",])),
+   overlap=c(nrow(overlap.SdrE[overlap.SdrE$Amino.acid == "S",]), 
+                   nrow(overlap.SdrE[overlap.SdrE$Amino.acid == "T",]), 
+                   nrow(overlap.SdrE[overlap.SdrE$Amino.acid == "Y",]), 
+                   nrow(overlap.SdrE[overlap.SdrE$Amino.acid == "H",]),
+                   nrow(overlap.SdrE[overlap.SdrE$Amino.acid == "R",])),
+    classI.overlap=c(nrow(overlap.ClassI.SdrE[overlap.ClassI.SdrE$Amino.acid == "S",]), 
+                   nrow(overlap.ClassI.SdrE[overlap.ClassI.SdrE$Amino.acid == "T",]), 
+                   nrow(overlap.ClassI.SdrE[overlap.ClassI.SdrE$Amino.acid == "Y",]), 
+                   nrow(overlap.ClassI.SdrE[overlap.ClassI.SdrE$Amino.acid == "H",]),
+                   nrow(overlap.ClassI.SdrE[overlap.ClassI.SdrE$Amino.acid == "R",])),
+    unique.pRHSTY=c(nrow(Unique.pRHSTY[Unique.pRHSTY$Amino.acid == "S",]), 
+                   nrow(Unique.pRHSTY[Unique.pRHSTY$Amino.acid == "T",]), 
+                   nrow(Unique.pRHSTY[Unique.pRHSTY$Amino.acid == "Y",]), 
+                   nrow(Unique.pRHSTY[Unique.pRHSTY$Amino.acid == "H",]),
+                   nrow(Unique.pRHSTY[Unique.pRHSTY$Amino.acid == "R",])),
+  unique.pHSTY=c(nrow(Unique.pHSTY[Unique.pHSTY$Amino.acid == "S",]), 
+                   nrow(Unique.pHSTY[Unique.pHSTY$Amino.acid == "T",]), 
+                   nrow(Unique.pHSTY[Unique.pHSTY$Amino.acid == "Y",]), 
+                   nrow(Unique.pHSTY[Unique.pHSTY$Amino.acid == "H",]),
+                   nrow(Unique.pHSTY[Unique.pHSTY$Amino.acid == "R",])),
+  unique.pRHSTY.classI=c(nrow(Unique.pRHSTY.ClassI[Unique.pRHSTY.ClassI$Amino.acid == "S",]), 
+                  nrow(Unique.pRHSTY.ClassI[Unique.pRHSTY.ClassI$Amino.acid == "T",]), 
+                  nrow(Unique.pRHSTY.ClassI[Unique.pRHSTY.ClassI$Amino.acid == "Y",]), 
+                  nrow(Unique.pRHSTY.ClassI[Unique.pRHSTY.ClassI$Amino.acid == "H",]),
+                  nrow(Unique.pRHSTY.ClassI[Unique.pRHSTY.ClassI$Amino.acid == "R",])),
+  unique.pHSTY.classI=c(nrow(Unique.pHSTY.ClassI[Unique.pHSTY.ClassI$Amino.acid == "S",]), 
+                 nrow(Unique.pHSTY.ClassI[Unique.pHSTY.ClassI$Amino.acid == "T",]), 
+                 nrow(Unique.pHSTY.ClassI[Unique.pHSTY.ClassI$Amino.acid == "Y",]), 
+                 nrow(Unique.pHSTY.ClassI[Unique.pHSTY.ClassI$Amino.acid == "H",]),
+                 nrow(Unique.pHSTY.ClassI[Unique.pHSTY.ClassI$Amino.acid == "R",])),
+ Unique.Seq.pR=c(nrow(Sequence.overlap.unique.SdrE[Sequence.overlap.unique.SdrE$Amino.acid.x == "S",]), 
+             nrow(Sequence.overlap.unique.SdrE[Sequence.overlap.unique.SdrE$Amino.acid.x == "T",]), 
+             nrow(Sequence.overlap.unique.SdrE[Sequence.overlap.unique.SdrE$Amino.acid.x == "Y",]), 
+             nrow(Sequence.overlap.unique.SdrE[Sequence.overlap.unique.SdrE$Amino.acid.x == "H",]),
+             nrow(Sequence.overlap.unique.SdrE[Sequence.overlap.unique.SdrE$Amino.acid.x == "R",])),
+ Unique.Seq.pH=c(nrow(Sequence.overlap.unique.SdrE[Sequence.overlap.unique.SdrE$Amino.acid.y == "S",]), 
+                 nrow(Sequence.overlap.unique.SdrE[Sequence.overlap.unique.SdrE$Amino.acid.y == "T",]), 
+                 nrow(Sequence.overlap.unique.SdrE[Sequence.overlap.unique.SdrE$Amino.acid.y == "Y",]), 
+                 nrow(Sequence.overlap.unique.SdrE[Sequence.overlap.unique.SdrE$Amino.acid.y == "H",]),
+                 nrow(Sequence.overlap.unique.SdrE[Sequence.overlap.unique.SdrE$Amino.acid.y == "R",])),
+ Unique.Seq.pR.classI=c(nrow(Sequence.overlap.unique.SdrE.classI[Sequence.overlap.unique.SdrE.classI$Amino.acid.x == "S",]), 
+                 nrow(Sequence.overlap.unique.SdrE.classI[Sequence.overlap.unique.SdrE.classI$Amino.acid.x == "T",]), 
+                 nrow(Sequence.overlap.unique.SdrE.classI[Sequence.overlap.unique.SdrE.classI$Amino.acid.x == "Y",]), 
+                 nrow(Sequence.overlap.unique.SdrE.classI[Sequence.overlap.unique.SdrE.classI$Amino.acid.x == "H",]),
+                 nrow(Sequence.overlap.unique.SdrE.classI[Sequence.overlap.unique.SdrE.classI$Amino.acid.x == "R",])),
+ Unique.Seq.pH.classI=c(nrow(Sequence.overlap.unique.SdrE.classI[Sequence.overlap.unique.SdrE.classI$Amino.acid.y == "S",]), 
+                 nrow(Sequence.overlap.unique.SdrE.classI[Sequence.overlap.unique.SdrE.classI$Amino.acid.y == "T",]), 
+                 nrow(Sequence.overlap.unique.SdrE.classI[Sequence.overlap.unique.SdrE.classI$Amino.acid.y == "Y",]), 
+                 nrow(Sequence.overlap.unique.SdrE.classI[Sequence.overlap.unique.SdrE.classI$Amino.acid.y == "H",]),
+                 nrow(Sequence.overlap.unique.SdrE.classI[Sequence.overlap.unique.SdrE.classI$Amino.acid.y == "R",])),
+ Seq.unique.pRHSTY=c(nrow(Sequence.unique.pRHSTY[Sequence.unique.pRHSTY$Amino.acid == "S",]), 
+                 nrow(Sequence.unique.pRHSTY[Sequence.unique.pRHSTY$Amino.acid == "T",]), 
+                 nrow(Sequence.unique.pRHSTY[Sequence.unique.pRHSTY$Amino.acid == "Y",]), 
+                 nrow(Sequence.unique.pRHSTY[Sequence.unique.pRHSTY$Amino.acid == "H",]),
+                 nrow(Sequence.unique.pRHSTY[Sequence.unique.pRHSTY$Amino.acid == "R",])),
+ Seq.unique.pHSTY=c(nrow(Sequence.unique.pHSTY[Sequence.unique.pHSTY$Amino.acid == "S",]), 
+                     nrow(Sequence.unique.pHSTY[Sequence.unique.pHSTY$Amino.acid == "T",]), 
+                     nrow(Sequence.unique.pHSTY[Sequence.unique.pHSTY$Amino.acid == "Y",]), 
+                     nrow(Sequence.unique.pHSTY[Sequence.unique.pHSTY$Amino.acid == "H",]),
+                     nrow(Sequence.unique.pHSTY[Sequence.unique.pHSTY$Amino.acid == "R",])),
+ Seq.unique.pRHSTY.classI=c(nrow(Sequence.unique.pRHSTY.classI[Sequence.unique.pRHSTY.classI$Amino.acid == "S",]), 
+                     nrow(Sequence.unique.pRHSTY.classI[Sequence.unique.pRHSTY.classI$Amino.acid == "T",]), 
+                     nrow(Sequence.unique.pRHSTY.classI[Sequence.unique.pRHSTY.classI$Amino.acid == "Y",]), 
+                     nrow(Sequence.unique.pRHSTY.classI[Sequence.unique.pRHSTY.classI$Amino.acid == "H",]),
+                     nrow(Sequence.unique.pRHSTY.classI[Sequence.unique.pRHSTY.classI$Amino.acid == "R",])),
+ Seq.unique.pHSTY.classI=c(nrow(Sequence.unique.pHSTY.classI[Sequence.unique.pHSTY.classI$Amino.acid == "S",]), 
+                    nrow(Sequence.unique.pHSTY.classI[Sequence.unique.pHSTY.classI$Amino.acid == "T",]), 
+                    nrow(Sequence.unique.pHSTY.classI[Sequence.unique.pHSTY.classI$Amino.acid == "Y",]), 
+                    nrow(Sequence.unique.pHSTY.classI[Sequence.unique.pHSTY.classI$Amino.acid == "H",]),
+                    nrow(Sequence.unique.pHSTY.classI[Sequence.unique.pHSTY.classI$Amino.acid == "R",]))
+)
+
+detach("package:plyr")
+SdrE.overlap.distribution <-  
+  SdrE.distribution %>% melt()%>% filter(variable == "overlap" | variable == "unique.pHSTY"| variable == "unique.pRHSTY")%>%
+  dplyr::group_by(variable) %>% mutate(fraction = round(value/sum(value)*100, digits = 1)) %>%
+  mutate(ymax =cumsum(fraction)) %>% mutate(ymin = c(0, head(ymax, n=-1)))%>% 
+  mutate(labelPosition = (ymax + ymin) / 2) %>% mutate(label = paste0(category, "\n ", value, "\n ", fraction, "%"))%>%
+  mutate("category" = factor(category, levels = category)) %>%
+ggplot(aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
+  geom_rect() +
+  geom_text( x=4.5, aes(y=labelPosition, label=label), size=3, ) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#b3cde3","#8c96c6", "#8856a7" , "#810f7c", "#210320")) +
+  coord_polar(theta="y") +
+  xlim(c(0, 4)) +
+  theme_void() +
+  theme(legend.position = "none")+
+  facet_wrap(~variable)
+
+#Class I 
+SdrE.overlap.distribution.classI <-  
+  SdrE.distribution %>% melt()%>% filter(variable == "classI.overlap" | variable == "unique.pHSTY.classI"| variable == "unique.pRHSTY.classI")%>%
+  group_by(variable) %>% mutate(fraction = round(value/sum(value)*100, digits = 1))%>%
+  mutate(ymax =cumsum(fraction)) %>% mutate(ymin = c(0, head(ymax, n=-1))) %>% 
+  mutate(labelPosition = (ymax + ymin) / 2) %>% mutate(label = paste0(category, "\n ", value, "\n ", fraction, "%"))%>%
+  mutate(category = factor(category, levels = category)) %>%
+  ggplot(aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
+  geom_rect() +
+  geom_text( x=4.5, aes(y=labelPosition, label=label), size=3, ) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#b3cde3","#8c96c6", "#8856a7" , "#810f7c", "#210320")) +
+  coord_polar(theta="y") +
+  xlim(c(0, 4)) +
+  theme_void() +
+  theme(legend.position = "none")+
+  facet_wrap(~variable)
+
+
+SdrE.seq.overlap.distribution <- 
+  SdrE.distribution %>% melt()%>% filter(variable == "Unique.Seq.pH" | variable == "Unique.Seq.pR"| 
+                                                                           variable == "Seq.unique.pHSTY" | variable == "Seq.unique.pRHSTY") %>%
+  group_by(variable) %>% mutate(fraction = round(value/sum(value)*100, digits = 1))%>%
+  mutate(ymax =cumsum(fraction)) %>% mutate(ymin = c(0, head(ymax, n=-1))) %>% 
+  mutate(labelPosition = (ymax + ymin) / 2) %>% mutate(label = paste0(category, "\n ", value, "\n ", fraction, "%"))%>%
+  mutate(category = factor(category, levels = category)) %>%
+  ggplot(aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
+  geom_rect() +
+  geom_text( x=4.5, aes(y=labelPosition, label=label), size=3, ) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#b3cde3","#8c96c6", "#8856a7" , "#810f7c", "#210320")) +
+  coord_polar(theta="y") +
+  xlim(c(0, 4)) +
+  theme_void() +
+  theme(legend.position = "none")+
+  facet_wrap(~variable)
+
+
+#classI
+
+SdrE.seq.overlap.distribution.classI <- 
+  SdrE.distribution %>% melt()%>% filter(variable == "Unique.Seq.pH.classI" | variable == "Unique.Seq.pR.classI"| 
+                                           variable == "Seq.unique.pHSTY.classI" | variable == "Seq.unique.pRHSTY.classI") %>%
+  group_by(variable) %>% mutate(fraction = round(value/sum(value)*100, digits = 1))%>%
+  mutate(ymax =cumsum(fraction)) %>% mutate(ymin = c(0, head(ymax, n=-1))) %>% 
+  mutate(labelPosition = (ymax + ymin) / 2) %>% mutate(label = paste0(category, "\n ", value, "\n ", fraction, "%"))%>%
+  mutate(category = factor(category, levels = category)) %>%
+  ggplot(aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
+  geom_rect() +
+  geom_text( x=4.5, aes(y=labelPosition, label=label), size=3, ) + # x here controls label position (inner / outer)
+  scale_fill_manual(values = c("#b3cde3","#8c96c6", "#8856a7" , "#810f7c", "#210320")) +
+  coord_polar(theta="y") +
+  xlim(c(0, 4)) +
+  theme_void() +
+  theme(legend.position = "none")+
+  facet_wrap(~variable)
+
+
+
+
+
+
+```
+
+
+```{r}
+
+ggarrange(ggarrange(SdrE.match.Venn,SdrE.overlap.distribution, 
+                    labels = c("a) Overlapp pRHSTY vs pHSTY", "b) Phosphosite distribution" ),
+                    font.label = list(size = 10, color = "black"), ncol = 2, widths = c(1,2)),
+          ggarrange(SdrE.unique.Venn, SdrE.seq.overlap.distribution.classI, 
+                    labels = c("c) Overlap same peptide \n but different psite", 
+                               "d) Phosphosite distribution \n same peptide \n different psite" ),
+                    font.label = list(size = 10, color = "black"), ncol = 2, widths = c(1,2)),
+          ggarrange(SdrE.same.scan.Venn ,
+                    labels = c("e) Identified on the same spectrum"),
+                    font.label = list(size = 10, color = "black"), ncol = 2, widths = c(1,2)),
+        
+          nrow = 3)
+
+
+#class I 
+
+ggarrange(ggarrange(SdrE.match.ClassI.Venn,SdrE.overlap.distribution.classI, 
+                    labels = c("a) Overlapp pRHSTY vs pHSTY", "b) Phosphosite distribution" ),
+                    font.label = list(size = 10, color = "black"), ncol = 2, widths = c(1,2)),
+          ggarrange(SdrE.unique.classI.Venn, SdrE.seq.overlap.distribution.classI, 
+                    labels = c("c) Overlap same peptide \n but different psite", 
+                               "d) Phosphosite distribution \n same peptide \n different psite" ),
+                    font.label = list(size = 10, color = "black"), ncol = 2, widths = c(1,2)),
+          ggarrange(SdrE.same.scan.classIVenn,
+                    labels = c("d) Identified on the same spectrum"), 
+                    font.label = list(size = 10, color = "black"), ncol = 2, widths = c(1,2)),
+          
+          nrow = 3)
+
+```
+
+##How many pArg are located on C-terminus
+
+```{r}
+
+breaks.num.position <- seq(1,30, by=1)
+pR.position.hist.SdrE<- pRHSTY.SdrE %>% filter(Amino.acid ==  "R") %>% pull(Position.in.peptide) %>% 
+  hist(breaks = breaks.num.position, plot= FALSE)
+pR.position.hist.Stk1<- pRHSTY.Stk1 %>% filter(Amino.acid ==  "R") %>% pull(Position.in.peptide) %>% 
+  hist(breaks = breaks.num.position, plot= FALSE)
+pR.position.hist.Stp1<- pRHSTY.Stp1 %>% filter(Amino.acid ==  "R") %>% pull(Position.in.peptide) %>% 
+  hist(breaks = breaks.num.position, plot= FALSE)
+
+  pR.position <- as.data.frame(breaks.num.position)
+  pR.position <- pR.position[-30,]
+  pR.position <- cbind.data.frame("Peptide.position" = pR.position, 
+                                  "SdrE.Occurence[%]" = pR.position.hist.SdrE$density*100,
+                                  "Stk1.Occurence[%]" = pR.position.hist.Stk1$density*100,
+                                  "Stp1.Occurence[%]" = pR.position.hist.Stp1$density*100)
+  pR.position %<>%   mutate(AVG=rowMeans(.[2:4]), SD = apply(.[2:4],1, sd, na.rm = TRUE)) %>%
+    mutate(Peptide.position = as.factor(as.character(Peptide.position))) %>% 
+    mutate(Peptide.position = factor(Peptide.position, 
+                                     levels=c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11",
+                                              "12", "13", "14","15", "16", "17", "18", "19", "20", 
+                                              "21", "22", "23", "24", "25", "26", "27", "28", "29")))
+  
+   
+  
+  pR.position.plot <- ggplot(pR.position, aes(x=Peptide.position, y=AVG, fill=Peptide.position))+
+    geom_bar(stat = "Identity")+
+    geom_errorbar(aes(x=Peptide.position, ymin=AVG-SD, ymax=AVG+SD), width=0.3)+
+    scale_fill_manual(values = c("#210320", "#210320", "#210320", "#210320", "#210320", "#210320",
+                                 "#210320", "#210320", "#210320", "#210320", "#210320", "#210320",
+                                 "#210320", "#210320", "#210320", "#210320", "#210320", "#210320",
+                                 "#210320", "#210320", "#210320", "#210320", "#210320", "#210320",
+                                 "#210320", "#210320", "#210320", "#210320", "#210320"))+
+      theme(panel.background =  element_blank(), 
+            axis.line = element_line(), legend.position = "none")+
+    ylab("Occurence [%]")+
+    xlab("pArg position within peptide")
+
+  library(stringr)
+  
+  pRHSTY.SdrE$length <- str_count(pRHSTY.SdrE$Sequence)
+  pRHSTY.SdrE$Distance <- (pRHSTY.SdrE$length-pRHSTY.SdrE$Position.in.peptide)*-1
+  
+   pRHSTY.Stk1$length <- str_count(pRHSTY.Stk1$Sequence)
+  pRHSTY.Stk1$Distance <- (pRHSTY.Stk1$length-pRHSTY.Stk1$Position.in.peptide)*-1
+  
+   pRHSTY.Stp1$length <- str_count(pRHSTY.Stp1$Sequence)
+  pRHSTY.Stp1$Distance <- (pRHSTY.Stp1$length-pRHSTY.Stp1$Position.in.peptide)*-1
+  
+  breaks.num <- seq(-40,0, by=1)
+  pR.distance.hist.SdrE<- pRHSTY.SdrE %>% filter(Amino.acid ==  "R") %>% pull(Distance) %>% 
+  hist(breaks = breaks.num, plot= FALSE)
+   pR.distance.hist.Stk1<- pRHSTY.Stk1 %>% filter(Amino.acid ==  "R") %>% pull(Distance) %>% 
+  hist(breaks = breaks.num, plot= FALSE)
+    pR.distance.hist.Stp1<- pRHSTY.Stp1 %>% filter(Amino.acid ==  "R") %>% pull(Distance) %>% 
+  hist(breaks = breaks.num, plot= FALSE)
+    
+     pR.distance.hist.SdrE.classI<- pRHSTY.SdrE %>% filter(Amino.acid ==  "R", Localization.prob >=0.75) %>% pull(Distance) %>% 
+  hist(breaks = breaks.num, plot= FALSE)
+   pR.distance.hist.Stk1.classI<- pRHSTY.Stk1 %>% filter(Amino.acid ==  "R", Localization.prob >= 0.75) %>% pull(Distance) %>% 
+  hist(breaks = breaks.num, plot= FALSE)
+    pR.distance.hist.Stp1.classI<- pRHSTY.Stp1 %>% filter(Amino.acid ==  "R", Localization.prob>=0.75) %>% pull(Distance) %>% 
+  hist(breaks = breaks.num, plot= FALSE)
+
+    
+    pR.distance <- as.data.frame(breaks.num)
+  pR.distance <- pR.distance[-1,]
+  pR.distance <- cbind.data.frame("Peptide.position" = pR.distance, 
+                                  "SdrE.Occurence[%]" = pR.distance.hist.SdrE$density*100,
+                                  "Stk1.Occurence[%]" = pR.distance.hist.Stk1$density*100,
+                                  "Stp1.Occurence[%]" = pR.distance.hist.Stp1$density*100,
+                                  "ClassI.SdrE.Occurence[%]" = pR.distance.hist.SdrE.classI$density*100,
+                                  "ClassI.Stk1.Occurence[%]" = pR.distance.hist.Stk1.classI$density*100,
+                                  "ClassI.Stp1.Occurence[%]" = pR.distance.hist.Stp1.classI$density*100)
+  
+  pR.distance %<>%   mutate(AVG=rowMeans(.[2:4]), SD = apply(.[2:4],1, sd, na.rm = TRUE),
+                            ClassI.AVG=rowMeans(.[5:7]), classI.SD = apply(.[5:7],1, sd, na.rm = TRUE)) %>%
+    mutate(Peptide.position = as.factor(as.character(Peptide.position))) %>% 
+    mutate(Peptide.position = factor(Peptide.position, 
+                                     levels=c("-39", "-38", "-37", "-36", "-35", "-34", "-33", "-32", "-31",
+                                              "-30", "-29", "-28", "-27", "-26", "-25", "-24", "-23", "-22", "-21",
+                                              "-20", "-19", "-18", "-17", "-16", "-15", "-14", "-13", "-12", "-11",
+                                              "-10", "-9", "-8", "-7", "-6", "-5", "-4", "-3", "-2", "-1", "0")))
+  
+  pR.distance.long <- pR.distance[,c("Peptide.position", "AVG", "ClassI.AVG", "SD", "classI.SD")] 
+  pR.distance.long$ClassI.AVG <- pR.distance.long$ClassI.AVG*-1
+  pR.distance.long$classI.SD <- pR.distance.long$classI.SD*-1
+ 
+  pR.distance.long <- melt(pR.distance.long, id= c("Peptide.position", "SD", "classI.SD"))
+  pR.distance.long$SD <- ifelse(pR.distance.long$variable == "AVG", pR.distance.long$SD, pR.distance.long$classI.SD)
+
+ pR.distance.plot <-  
+    ggplot(pR.distance.long, aes(x=Peptide.position, y=value, fill=variable))+
+    geom_bar(stat = "Identity")+
+    geom_errorbar(aes(x=Peptide.position, ymin=value-SD, ymax=value+SD), width=0.3)+
+    scale_fill_manual(values = c("#210320","#8c96c6" ))+
+      theme(panel.background =  element_blank(), 
+            axis.line = element_line(), legend.position = "none")+
+    ylab("Occurence [%]")+
+    xlab("pArg position within peptide")
+
+ 
+ggarrange(pR.position.plot, pR.distance.plot, 
+          labels = c("a) Occurence of oArg within the \n peptide" , 
+                     "b) pArg distance from C-terminus"), 
+          font.label = list(size = 10, color = "black"), ncol = 2, nrow = 1)
+```

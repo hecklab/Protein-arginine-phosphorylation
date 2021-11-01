@@ -1,7 +1,7 @@
 ---
 title: "Endgenous_pArg_anlysis"
 author: "Nadine Prust"
-date: "4/13/2021"
+date: "10/28/2021"
 output: html_document
 ---
 
@@ -25,10 +25,10 @@ library(ggpubr)
 Read Phospho (RHSTY)Sites.txt from MaxQuant (v1.6.3.4) from individual searcher for the three mutants
 
 ```{r}
-phospho_Stp1 <- read.delim("./pArg_proteins/Phospho (RHSTY)Sites_Stp1.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+phospho_Stp1 <- read.delim("MQ_output_txt/Endogenous_data/Stp1/txt/Phospho (RHSTY)Sites_Stp1.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
 
-phospho_Stk1 <- read.delim("./pArg_proteins/Phospho (RHSTY)Sites_Stk1.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
-phospho_SdrE <- read.delim("./pArg_proteins/Phospho (RHSTY)Sites_SdrE.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+phospho_Stk1 <- read.delim("MQ_output_txt/Endogenous_data/Stk1/txt/Phospho (RHSTY)Sites_Stk1.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+phospho_SdrE <- read.delim("MQ_output_txt/Endogenous_data/SdrE/txt/Phospho (RHSTY)Sites_SdrE.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
 
 ```
 
@@ -73,7 +73,7 @@ Calculate frequency of all 20 amino acids in the S. aureus proteome USA300 (revi
 
 ```{r}
 proteome.SdrE <- read.csv("MQ_output_txt/Endogenous_data/SdrE_proteome.tab", sep="\t",header=T, stringsAsFactors = FALSE)  #fill in the name of your proteome file here
-proteome.Stp1<- read.csv(".MQ_output_txt/Endogenous_data/Stp1_proteome.tab", sep="\t",header=T, stringsAsFactors = FALSE)  #fill in the name of your proteome file here
+proteome.Stp1<- read.csv("MQ_output_txt/Endogenous_data/Stp1_proteome.tab", sep="\t",header=T, stringsAsFactors = FALSE)  #fill in the name of your proteome file here
 proteome.Stk1 <- read.csv("MQ_output_txt/Endogenous_data/Stk1_proteome.tab", sep="\t",header=T, stringsAsFactors = FALSE)  #fill in the name of your proteome file here
 proteome.USA300 <- read.csv("MQ_output_txt/Endogenous_data/uniprot-usa300-filtered-reviewed_yes.tab", sep="\t",header=T, stringsAsFactors = FALSE)  #fill in the name of your proteome file here
 
@@ -314,7 +314,7 @@ Read Phospho (RHSTY).txt from combined MaxQuant (v1.6.3.4) search and read unipr
 
 ```{r}
 phospho_RHSTY <- read.delim("MQ_output_txt/Endogenous_data/LFQ_Saureus/txt/Phospho (RHSTY)Sites_exp7.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
-uniprotname <- read.delim("MQ_output_txt/Endogenous_data/LFQ_Saureus/txt/uniprot_list_pRHSTY.txt", header = TRUE, stringsAsFactors = FALSE)
+uniprotname <- read.delim("MQ_output_txt/Endogenous_data/LFQ_Saureus/txt/uniprot-USA300.txt", header = TRUE, stringsAsFactors = FALSE)
 
 ```
 
@@ -324,7 +324,7 @@ Extract important columns and filter data
 pRHSTY.not.filtered<- phospho_RHSTY[, c("Protein","Amino.acid", "Positions.within.proteins", "Number.of.Phospho..RHSTY.",
                          "Intensity.SdrE_1", "Intensity.SdrE_2", "Intensity.SdrE_3", "Intensity.SdrE_4",
                          "Intensity.Stk1_1", "Intensity.Stk1_2", "Intensity.Stk1_3", "Intensity.Stk1_4",
-                         "Intensity.Stp1_1", "Intensity.Stp1_2", "Intensity.Stp1_3", "Intensity.Stp1_4", "Delta.score",
+                         "Intensity.Stp1_1", "Intensity.Stp1_2", "Intensity.Stp1_3", "Intensity.Stp1_4", "Score",  "Delta.score",
                          "Localization.prob", "Sequence.window",
                          "Reverse", "Potential.contaminant",
                          "Localization.prob.SdrE_1","Localization.prob.SdrE_2", "Localization.prob.SdrE_3", "Localization.prob.SdrE_4", 
@@ -488,7 +488,7 @@ pRHSTY.filtered <- cbind(pRHSTY.filtered, posthoc)                              
 rownames(uniprotname) <- uniprotname[, "Entry"]
 colnames(uniprotname)[colnames(uniprotname)=="Entry"] <- "Protein"
 
-minimal.df<- uniprotname[, c("Protein", "Protein.names", "Gene.names", "Function..CC.")]
+minimal.df<- uniprotname[, c("Protein", "Protein.names", "Gene.names")]
 pRHSTY.filtered<- left_join(pRHSTY.filtered, minimal.df,by=c('Protein'))
 
 
@@ -524,9 +524,6 @@ cutoffdata <- pRHSTY.filtered[pRHSTY.filtered$anovaqscore >= 1.3,FCcolumns]     
 
 cutoffdata$protein <- rownames(cutoffdata)  
 cutoffdatam<-melt(cutoffdata) 
-
-qqnorm(cutoffdatam$value)
-qqline(cutoffdatam$value, col="red", lty=2)
 
 #taking mean +- 1*SD as cutoff
 FC.mean <- mean(cutoffdatam$value, na.rm=TRUE)
@@ -614,18 +611,20 @@ Stk1.Ctrl.plot.pR.new <-
 Create pie-chart for over- and under-represented p-sites:
 
 ```{r}
+pRHSTY.filtered_pArg <- pRHSTY.filtered[pRHSTY.filtered$Amino.acid== "R",]
+
 pRHSTY.filtered.Stp1.Ctrl.regulation<- data.frame(
   category=c("neutral", "down", "up"),
-  count=c(nrow(pRHSTY.filtered[pRHSTY.filtered$Stp1.SdrE.subset == "neutral",]), 
-          nrow(pRHSTY.filtered[pRHSTY.filtered$Stp1.SdrE.subset == "down",]),
-          nrow(pRHSTY.filtered[pRHSTY.filtered$Stp1.SdrE.subset == "up",]))
+  count=c(nrow(pRHSTY.filtered_pArg[pRHSTY.filtered_pArg$Stp1.SdrE.subset == "neutral",]), 
+          nrow(pRHSTY.filtered_pArg[pRHSTY.filtered_pArg$Stp1.SdrE.subset == "down",]),
+          nrow(pRHSTY.filtered_pArg[pRHSTY.filtered_pArg$Stp1.SdrE.subset == "up",]))
 )
 
 pRHSTY.filtered.Stk1.Ctrl.regulation<- data.frame(
   category=c("neutral", "down", "up"),
-  count=c(nrow(pRHSTY.filtered[pRHSTY.filtered$Stk1.SdrE.subset == "neutral",]), 
-          nrow(pRHSTY.filtered[pRHSTY.filtered$Stk1.SdrE.subset == "down",]),
-          nrow(pRHSTY.filtered[pRHSTY.filtered$Stk1.SdrE.subset == "up",]))
+  count=c(nrow(pRHSTY.filtered_pArg[pRHSTY.filtered_pArg$Stk1.SdrE.subset == "neutral",]), 
+          nrow(pRHSTY.filtered_pArg[pRHSTY.filtered_pArg$Stk1.SdrE.subset == "down",]),
+          nrow(pRHSTY.filtered_pArg[pRHSTY.filtered_pArg$Stk1.SdrE.subset == "up",]))
 )
 
 pRHSTY.filtered.Stp1.Ctrl.regulation$fraction <- pRHSTY.filtered.Stp1.Ctrl.regulation$count / sum(pRHSTY.filtered.Stp1.Ctrl.regulation$count)
@@ -669,22 +668,23 @@ psite.change.Stp1.Ctrl <-
   ggplot(pRHSTY.filtered.Stp1.Ctrl.regulation, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category.ordered)) +
   geom_rect() +
   geom_text(x=1, aes(y=labelPosition, label=label), size=3, ) + # x here controls label position (inner / outer)
-  scale_fill_manual(values = c("#000000","#c51b7d", "#5AB4AD")) +
-  coord_polar(theta="y", start = 0.375)+
+  scale_fill_manual(values = c("#A45BBA","#745aba", "#ba5aa0")) +
+  coord_polar(theta="y", start = 0.8577)+
   theme_void()+
   theme(legend.position = "none", plot.title =  element_text(hjust = 0.5))+
-  ggtitle("Phosphorylation changes \n 2800")
+  ggtitle("519 quantified \n pArg sites")
+
 
 
 psite.change.Stk1.Ctrl <-
   ggplot(pRHSTY.filtered.Stk1.Ctrl.regulation, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category.ordered)) +
   geom_rect() +
   geom_text(x=1, aes(y=labelPosition, label=label), size=3, ) + # x here controls label position (inner / outer)
-  scale_fill_manual(values = c("#000000","#c51b7d", "#5AB4AD")) +
-  coord_polar(theta="y", start = 0.155)+
+  scale_fill_manual(values = c("#A45BBA","#745aba", "#ba5aa0")) +
+  coord_polar(theta="y", start = 0.055)+
   theme_void()+
   theme(legend.position = "none", plot.title =  element_text(hjust = 0.5))+
-  ggtitle("Phosphorylation changes \n 2800")
+  ggtitle("519 quantified \n pArg sites")
 ```
 
 Combine graphs

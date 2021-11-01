@@ -1,0 +1,172 @@
+---
+title: "Amino_acid_comparison"
+author: "Nadine Prust"
+date: "10/27/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Compare how many phosphopeptide (pTYHR) are also identified as pSer
+All necessary data is deposited on Pride and can be downloaded. The used files for this script can be found in the MQ_output_txt.zip file. Add the MQ_output_txt folder then to your project folder to access the required data. 
+
+```{r}
+library(dplyr)
+library(stringr)
+library(VennDiagram)
+library(ggplot2)
+library(ggpubr)
+```
+
+```{r}
+Identification <- function(df){
+  a <- read.delim(df, header = TRUE, stringsAsFactors = FALSE, dec = ".") %>%
+    purrr::when(is.character(.$Reverse) ~ filter(., Reverse != "+"), ~.) %>% filter(Potential.contaminant != "+") %>%
+    mutate("ID"= paste(.$Protein, .$Amino.acid, .$Positions.within.proteins,
+                       sep = ",")) %>%
+    mutate("ID2"= paste(.$Protein, .$Amino.acid, .$Positions.within.proteins, .$Best.localization.scan.number,
+                        sep = ",")) %>%
+    
+    #log transform data
+    mutate_at(vars(matches("Intensity.[a-zA-Z]{3}._\\d$")), log2) %>%
+    #change infinity values to NA
+    mutate_at(vars(matches("Intensity.[a-zA-Z]{3}._\\d$")), list(~ ifelse( is.infinite(.), NA, .))) %>%
+    #median normalization
+    mutate_at(vars(matches("Intensity.[a-zA-Z]{3}._\\d$")),list(~ .- median(., na.rm = TRUE))) %>%
+    rowwise()  %>%
+    dplyr::mutate( Number.NA = sum(across(c(grep("Intensity.[a-zA-Z]{3}._\\d$", colnames(.))),list(~sum(is.na(.)))))) 
+  
+  a$Sequence <- gsub("\\(\\d*\\.?\\d*\\)","",  a$Phospho..RHSTY..Probabilities)
+  a$missed.cleavages <- str_count(a$Sequence, "K|R")-1
+  a$before.missed.cleavage <- str_extract(a$Sequence, "^(.*?R|K)")
+  a$after.missed.cleavage <- str_extract(a$Sequence, "R.*|K.*")
+  
+  
+  a$Sequence.adj <- ifelse(a$missed.cleavages <=0 , a$Sequence, NA)
+    b<-  a[which(str_count(a$before.missed.cleavage) >= str_count(a$after.missed.cleavage)) ,"before.missed.cleavage"]   #extract sequences longer than 4 amino acids
+    c <- a[which(str_count(a$after.missed.cleavage) >= str_count(a$before.missed.cleavage)) ,"after.missed.cleavage"]
+    
+    a$Sequence.adj <- ifelse(a$before.missed.cleavage %in% b$before.missed.cleavage,
+                              a$before.missed.cleavage, a$Sequence.adj)
+    a$Sequence.adj <- ifelse(a$after.missed.cleavage %in% c$after.missed.cleavage, a$after.missed.cleavage, a$Sequence.adj)
+    a$Sequence.adj <- ifelse(is.na(a$Sequence.adj), a$after.missed.cleavage, a$Sequence.adj)
+
+  
+  return(a)
+}
+
+pRHSTY.exp7 <- Identification("MQ_output_txt/Endogenous_data/LFQ_Saureus/txt/Phospho (RHSTY)Sites_exp7.txt")
+
+#Split date according to phopshorylated amino acid
+AA_split.sequence <- function(df){
+  
+  pSer <- df[df$Amino.acid == "S",]
+  pSer.identified <- pSer[which(!duplicated(pSer$Protein)), "Sequence"]
+  pSer.classI <- pSer[pSer$Localization.prob >= 0.75,]
+  pSer.identified.classI <- pSer.classI[which(!duplicated(pSer.classI$Protein)), "Sequence"]
+  
+  pThr <- df[df$Amino.acid == "T",]
+  pThr.identified <- pThr[which(!duplicated(pThr$Protein)), "Sequence"]
+  pThr.classI <- pThr[pThr$Localization.prob >= 0.75,]
+  pThr.identified.classI <- pThr.classI[which(!duplicated(pThr.classI$Protein)), "Sequence"]
+  
+  pTyr <- df[df$Amino.acid == "Y",]
+  pTyr.identified <- pTyr[which(!duplicated(pTyr$Protein)), "Sequence"]
+  pTyr.classI <- pTyr[pTyr$Localization.prob >= 0.75,]
+  pTyr.identified.classI <- pTyr.classI[which(!duplicated(pTyr.classI$Protein)), "Sequence"]
+  
+  pHis <- df[df$Amino.acid == "H",]
+  pHis.identified <- pHis[which(!duplicated(pHis$Protein)), "Sequence"]
+  pHis.classI <- pHis[pHis$Localization.prob >= 0.75,]
+  pHis.identified.classI <- pHis.classI[which(!duplicated(pHis.classI$Protein)), "Sequence"]
+  
+  pArg <- df[df$Amino.acid == "R",]
+  pArg.identified <- pArg[which(!duplicated(pArg$Protein)), "Sequence"]
+  pArg.classI <- pArg[pArg$Localization.prob >= 0.75,]
+  pArg.identified.classI <- pArg.classI[which(!duplicated(pArg.classI$Protein)), "Sequence"]
+  
+  output <- list("pSer" = pSer, "pSer.identified" = pSer.identified, "pSer.classI"= pSer.classI, "pSer.identified.classI"=  pSer.identified.classI,
+                 "pThr" =  pThr, "pThr.identified" = pThr.identified, "pThr.classI"= pThr.classI, "pThr.identified.classI" = pThr.identified.classI,
+                 "pTyr" =  pTyr, "pTyr.identified" = pTyr.identified, "pTyr.classI"= pTyr.classI, "pTyr.identified.classI" = pTyr.identified.classI,
+                 "pHis" = pHis, "pHis.identified" = pHis.identified, "pHis.classI"= pHis.classI, "pHis.identified.classI" = pHis.identified.classI,
+                 "pArg" = pArg, "pArg.identified" =  pArg.identified, "pArg.classI"=  pArg.classI, "pArg.identified.classI"= pArg.identified.classI)
+  
+  return(output)
+}
+pRHSTY.split <- AA_split.sequence(pRHSTY.exp7)
+
+# Calculate how many peptides are also identified as pSer based on peptide sequence
+
+Overlap.calculation <- function(a,b,c,d,e, aa){
+  overlap.Thr <- calculate.overlap(
+    x=list(
+      a,
+      b
+    )
+  )
+  overlap.Tyr <- calculate.overlap(
+    x=list(
+      a,
+      c
+    )
+  )
+  overlap.His <- calculate.overlap(
+    x=list(
+      a,
+      d
+    )
+  )
+  overlap <- calculate.overlap(
+    x=list(
+      a,
+      e
+    )
+  )
+  
+  df <- rbind.data.frame(cbind("AA" = "Thr", "pSer" =length(overlap.Thr$a3), "Total" = length(b), "PC" = length(overlap.Thr$a3)/length(b)*100),
+                         cbind("AA" = "Tyr", "pSer" =length(overlap.Tyr$a3), "Total" = length(c), "PC" =length(overlap.Tyr$a3)/length(c)*100 ),
+                         cbind("AA" = "His", "pSer" =length(overlap.His$a3), "Total" = length(d), "PC" = length(overlap.His$a3)/length(d)*100),
+                         cbind("AA" = aa, "pSer" =length(overlap$a3), "Total" = length(e), "PC" =length(overlap$a3)/ length(e)*100))
+  return(df)
+}
+
+AA.comparison <- Overlap.calculation(pRHSTY.split$pSer$Sequence,
+                                     pRHSTY.split$pThr$Sequence,
+                                     pRHSTY.split$pTyr$Sequence,
+                                     pRHSTY.split$pHis$Sequence,
+                                     pRHSTY.split$pArg$Sequence,
+                                     "Arg")
+
+AA.comparison.classI <- Overlap.calculation(pRHSTY.split$pSer.classI$Sequence,
+                                     pRHSTY.split$pThr.classI$Sequence,
+                                     pRHSTY.split$pTyr.classI$Sequence,
+                                     pRHSTY.split$pHis.classI$Sequence,
+                                     pRHSTY.split$pArg.classI$Sequence,
+                                     "Arg")
+
+#Plot der percentage of pTYHR peptides that were also identified being phosphorylated on pSer
+pc.Ser.all <-
+AA.comparison %>% mutate("PC" = as.numeric(PC)) %>% mutate("AA" = factor(AA, levels = c("Thr", "Tyr", "His" ,"Arg"))) %>%
+ggplot()+
+  geom_bar(aes(x=AA, y=PC, fill=AA), stat = "Identity")+
+  scale_fill_manual(values = c("Thr"= "#8c96c6","Tyr"=  "#8856a7" ,"His"= "#810f7c", "Arg"= "#210320"))+
+  theme(axis.title.x = element_blank(), panel.background =  element_blank(), axis.line = element_line(), legend.position = "none")+
+  ylab("% pSer")+
+  ylim(0,100)
+
+
+pc.Ser.ClassI <-
+  AA.comparison.classI %>% mutate("PC" = as.numeric(PC)) %>% mutate("AA" = factor(AA, levels = c("Thr", "Tyr", "His" ,"Arg"))) %>%
+  ggplot()+
+  geom_bar(aes(x=AA, y=PC, fill=AA), stat = "Identity")+
+  scale_fill_manual(values = c("Thr"= "#8c96c6","Tyr"=  "#8856a7" ,"His"= "#810f7c", "Arg"= "#210320"))+
+  theme(axis.title.x = element_blank(), panel.background =  element_blank(), axis.line = element_line(), legend.position = "none")+
+  ylab("% pSer")+
+  ylim(0,100)
+
+ggarrange(pc.Ser.all, pc.Ser.ClassI, labels = c("a) all p-sites", 'b) class I p-sites'), ncol = 2)
+
+```
+

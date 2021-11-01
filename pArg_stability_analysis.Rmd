@@ -29,7 +29,7 @@ Read "evidence.txt" and "msms.txt" from MaxQuant v1.6.17.0 from time series
 
 ```{r}
 Stability.test.evidence <- read.delim("MQ_output_txt/Synthetic_peptides/Stability_4C/txt/evidence.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
-Stability.test.msms <- read.delim("MQ_output_txt/Synthetic_peptides/Stability_4C/txtStability_test/msms.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+Stability.test.msms <- read.delim("MQ_output_txt/Synthetic_peptides/Stability_4C/txt/msms.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
 
 ```
 
@@ -301,7 +301,7 @@ Read "evidence.txt" and "msms.txt" from overnight stability (were search in MQ (
 ```{r}
 
 Stability.test.evidence.on <- read.delim("MQ_output_txt/Synthetic_peptides/Stability_room_temp/txt/evidence.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
-Stability.test.msms.on <- read.delim("MQ_output_txt/Synthetic_peptides/Stability_room_temp/txt/Stability_test/on/msms.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+Stability.test.msms.on <- read.delim("MQ_output_txt/Synthetic_peptides/Stability_room_temp/txt/msms.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
 ```
 
 Filter for contaminants

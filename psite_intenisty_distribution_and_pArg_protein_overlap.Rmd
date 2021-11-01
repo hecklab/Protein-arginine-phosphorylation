@@ -1,7 +1,7 @@
 ---
 title: "psite intensity distributon and pArg protein overlap"
 author: "Nadine Prust"
-date: "4/20/2021"
+date: "10/28/2021"
 output: html_document
 ---
 
@@ -118,10 +118,10 @@ SdrE.pRHSTY.filtered$NA_SdrE <- apply(SdrE.pRHSTY.filtered[,intensitycolumns.Sdr
 
 
 
-# filter for identification 2x in at least one group 
-Stk1.pRHSTY.filtered <- Stk1.pRHSTY.filtered[(Stk1.pRHSTY.filtered$NA_Stk1 <=2),]
-Stp1.pRHSTY.filtered <- Stp1.pRHSTY.filtered[(Stp1.pRHSTY.filtered$NA_Stp1 <=2),]
-SdrE.pRHSTY.filtered <- SdrE.pRHSTY.filtered[(SdrE.pRHSTY.filtered$NA_SdrE <=2),]
+# filter for identification 3x in at least one group 
+Stk1.pRHSTY.filtered <- Stk1.pRHSTY.filtered[(Stk1.pRHSTY.filtered$NA_Stk1 <=1),]
+Stp1.pRHSTY.filtered <- Stp1.pRHSTY.filtered[(Stp1.pRHSTY.filtered$NA_Stp1 <=1),]
+SdrE.pRHSTY.filtered <- SdrE.pRHSTY.filtered[(SdrE.pRHSTY.filtered$NA_SdrE <=1),]
 
 ```
 
@@ -133,7 +133,7 @@ Stp1.pRHSTY.filtered.classI <- Stp1.pRHSTY.filtered[Stp1.pRHSTY.filtered$Localiz
 SdrE.pRHSTY.filtered.classI <- SdrE.pRHSTY.filtered[SdrE.pRHSTY.filtered$Localization.prob >= 0.75,]
 ```
 
-Plot intensity distribution forpPser, pThr, pTyr, pHis and pArg for all three mutants
+Plot intensity distribution for pPser, pThr, pTyr, pHis and pArg for all three mutants
 
 ```{r}
 Stk1.abundance.plot <-

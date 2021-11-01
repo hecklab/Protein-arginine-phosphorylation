@@ -22,11 +22,11 @@ library(ggplot2)
 Read Phospho (RHSTY)Sites.txt from MaxQuant (v1.6.3.4) from E.coli, B. subtilis and S.aureus Sdr mutants
 
 ```{r}
-pRHSTY.Ecoli <- read.delim("MQ_output_txt/Endogenous_data/Ecoli/Phospho (RHSTY)Sites_Ecoli.txt", header = TRUE,
+pRHSTY.Ecoli <- read.delim("MQ_output_txt/Endogenous_data/Ecoli/txt/Phospho (RHSTY)Sites_Ecoli.txt", header = TRUE,
                            stringsAsFactors = FALSE, dec = ".")
-pRHSTY.Bsub <- read.delim("MQ_output_txt/Endogenous_data/Bsubtilis/Phospho (RHSTY)Sites_sub.txt", header = TRUE,
+pRHSTY.Bsub <- read.delim("MQ_output_txt/Endogenous_data/Bsubtilis/txt/Phospho (RHSTY)Sites_sub.txt", header = TRUE,
                            stringsAsFactors = FALSE, dec = ".")
-phospho_SdrE <- read.delim("MQ_output_txt/Endogenous_data/SdrE/Phospho (RHSTY)Sites_SdrE.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
+phospho.SdrE <- read.delim("MQ_output_txt/Endogenous_data/SdrE/txt/Phospho (RHSTY)Sites_SdrE.txt", header = TRUE, stringsAsFactors = FALSE, dec = ".")
 
 ```
 
@@ -243,7 +243,7 @@ SdrE.class1.distribution$org <- "Saureus"
 SdrE.class1.distribution$type <- "classI"
 ```
 
-Plot percentage of pArg sites for the thre different organisms
+Plot percentage of pArg sites for the three different organisms 
 
 ```{r}
 

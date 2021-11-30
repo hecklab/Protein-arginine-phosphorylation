@@ -70,11 +70,11 @@ pRHSTY.Stk1 <- Identification.pRHSTY("MQ_output_txt/Endogenous_data/Stk1/pRHSTY/
 pRHSTY.Stp1 <- Identification.pRHSTY("MQ_output_txt/Endogenous_data/Stp1/pRHSTY/txt/Phospho (RHSTY)Sites_Stp1.txt")
 
 pRHSTY.SdrE.short <- pRHSTY.SdrE %>% select(Protein, Amino.acid, Positions.within.proteins, ID, ID2, Number.of.Phospho..RHSTY.,
-                                            Localization.prob, Best.localization.evidence.ID, Best.localization.raw.file,
+                                            Localization.prob, Score, Best.localization.evidence.ID, Best.localization.raw.file,
                                             Best.localization.scan.number, Sequence.window, missed.cleavages,
                                             Sequence, before.missed.cleavage, after.missed.cleavage, Sequence.adj)
 colnames(pRHSTY.SdrE.short) <-c("Protein", "Amino.acid", "Positions.within.proteins", "ID", "ID2", "Number.of.Phospho", 
-                               "Localization.prob", "Best.localization.evidence.ID", 
+                               "Localization.prob", "Score", "Best.localization.evidence.ID", 
                                "Best.localization.raw.file",
                                "Best.localization.scan.number", "Sequence.window","missed.cleavages",
                                "Sequence", "before.missed.cleavage", "after.missed.cleavage", "Sequence.adj")
@@ -124,12 +124,12 @@ pHSTY.Stp1 <- Identification.pHSTY("MQ_output_txt/Endogenous_data/Stp1/pHSTY/txt
 
 
 pHSTY.SdrE.short <- pHSTY.SdrE %>% select(Protein, Amino.acid, Positions.within.proteins, ID, ID2, Number.of.Phospho..HSTY.,
-                                            Localization.prob, Best.localization.evidence.ID, Best.localization.raw.file,
+                                            Localization.prob, Score, Best.localization.evidence.ID, Best.localization.raw.file,
                                             Best.localization.scan.number, Sequence.window, missed.cleavages,
                                             Sequence, before.missed.cleavage, after.missed.cleavage, Sequence.adj)
 
 colnames(pHSTY.SdrE.short) <-c("Protein", "Amino.acid", "Positions.within.proteins", "ID", "ID2", "Number.of.Phospho", 
-                               "Localization.prob", "Best.localization.evidence.ID", 
+                               "Localization.prob", "Score", "Best.localization.evidence.ID", 
                                "Best.localization.raw.file",
                                "Best.localization.scan.number", "Sequence.window","missed.cleavages",
                                "Sequence", "before.missed.cleavage", "after.missed.cleavage", "Sequence.adj")
@@ -210,10 +210,86 @@ same.scan.prob <- data.frame(category = c("ClassI", "ClassII and III"),
                                        nrow(same.scan.SdrE[same.scan.SdrE$Localization.prob.y <= 0.75,])))
 
 
+pHSTY.overlap <- pHSTY.SdrE.classI[(!pHSTY.SdrE.classI$ID %in% Unique.pHSTY.ClassI$ID),]
+
+Score.average <- rbind.data.frame(cbind("Sample" = "pRHSTY.overlap",
+                                        "Score" = mean(overlap.ClassI.SdrE$Score),
+                                        "SD" = sd(overlap.ClassI.SdrE$Score)),
+                                  cbind("Sample" = "pHSTY.overlap",
+                                        "Score" = mean(pHSTY.overlap$Score),
+                                        "SD" = sd(pHSTY.overlap$Score)),
+                                  cbind("Sample" = "pRHSTY.unique",
+                                        "Score" = mean(Unique.pRHSTY.ClassI$Score),
+                                        "SD" = sd(Unique.pRHSTY.ClassI$Score)),
+                                  cbind("Sample" = "pHSTY.unique",
+                                        "Score" = mean(Unique.pHSTY.ClassI$Score),
+                                        "SD" = sd(Unique.pHSTY.ClassI$Score)),
+                                  cbind("Sample" = "pRHSTY.seq.overlap",
+                                        "Score" = mean(Sequence.overlap.pRHSTY.classI$Score),
+                                        "SD" = sd(Sequence.overlap.pRHSTY.classI$Score)),
+                                  cbind("Sample" = "pHSTY.seq.overlap",
+                                        "Score" = mean(Sequence.overlap.pHSTY.classI$Score),
+                                        "SD" = sd(Sequence.overlap.pHSTY.classI$Score)),
+                                  cbind("Sample" = "pRHSTY.seq.unique",
+                                        "Score" = mean(Sequence.unique.pRHSTY.classI$Score),
+                                        "SD" = sd(Sequence.unique.pRHSTY.classI$Score)),
+                                  cbind("Sample" = "pHSTY.seq.unique",
+                                        "Score" = mean(Sequence.unique.pHSTY.classI$Score),
+                                        "SD" = sd(Sequence.unique.pHSTY.classI$Score))
+)
+  Score.average %<>% mutate(Score = as.numeric(Score), SD = as.numeric(SD))                                
+
+  
+  Score.dis <- rbind.data.frame(cbind("Sample" = "pRHSTY.overlap",
+                                          "Score" = overlap.ClassI.SdrE$Score,
+                                      "missed.cleavage" = overlap.ClassI.SdrE$missed.cleavages),
+                                    cbind("Sample" = "pHSTY.overlap",
+                                          "Score" = pHSTY.overlap$Score,
+                                          "missed.cleavage" = pHSTY.overlap$missed.cleavages),
+                                    cbind("Sample" = "pRHSTY.unique",
+                                          "Score" = Unique.pRHSTY.ClassI$Score,
+                                          "missed.cleavage" =Unique.pRHSTY.ClassI$missed.cleavages ),
+                                    cbind("Sample" = "pHSTY.unique",
+                                          "Score" = Unique.pHSTY.ClassI$Score,
+                                          "missed.cleavage" =Unique.pHSTY.ClassI$missed.cleavages ),
+                                    cbind("Sample" = "pRHSTY.seq.overlap",
+                                          "Score" = Sequence.overlap.pRHSTY.classI$Score, 
+                                          "missed.cleavage" = Sequence.overlap.pRHSTY.classI$missed.cleavages),
+                                    cbind("Sample" = "pHSTY.seq.overlap",
+                                          "Score" = Sequence.overlap.pHSTY.classI$Score,
+                                          "missed.cleavage" = Sequence.overlap.pHSTY.classI$missed.cleavages),
+                                    cbind("Sample" = "pRHSTY.seq.unique",
+                                          "Score" =Sequence.unique.pRHSTY.classI$Score,
+                                          "missed.cleavage" = Sequence.unique.pRHSTY.classI$missed.cleavages),
+                                    cbind("Sample" = "pHSTY.seq.unique",
+                                          "Score" = Sequence.unique.pHSTY.classI$Score,
+                                          "missed.cleavage" = Sequence.unique.pHSTY.classI$missed.cleavages)
+  
+)
+  
+  
 ```
 ##Graphs
 
 ```{r}
+
+ggplot(Score.average)+
+  geom_violin(aes(x=Sample, y=Score, fill=Sample))+
+  geom_errorbar(aes(x=Sample, ymin=Score-SD, ymax=Score+SD))+
+  scale_fill_brewer(palette = "PuRd")+
+  theme(panel.background =  element_blank(), 
+        axis.line = element_line(), legend.position = "none",
+        axis.text.x = element_text(angle = 90))
+
+Score.dis  %>% mutate(Score = as.numeric(Score), missed.cleavage = as.numeric(missed.cleavage)) %>%
+ggplot(aes(x=Sample, y=missed.cleavage, fill=Sample)) +
+  geom_violin(color="black", show.legend = FALSE)+
+  scale_fill_brewer(palette = "PuRd") +
+  geom_boxplot(width=0.1, show.legend = FALSE)+
+  stat_summary(fun=mean, geom="point", shape=23, size=3, show.legend = FALSE)+
+  theme(axis.title.x = element_blank(), panel.background =  element_blank(),
+        axis.line = element_line(), axis.text.x = element_text(angle = 90))+
+  ylab("Average missed cleavages")
 
 names.ven <-  c( "pHSTY", "pRHSTY")
 

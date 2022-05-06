@@ -1,17 +1,19 @@
 # Protein-arginine-phosphorylation
+These scripts where used in the data analysis of the described paper below. These scripts read in all necessary MQ output files which are deposited on ProteomeXchange with the accession number PXD026981.
 
-These scripts where used in the data analysis of the described paper below. These scripts read in all necessary MQ output files which are deposited on Pride. The accession number will be published after the manuscript is accepted.
+The scripts analyze the stability of synthetic pArg, fragmentation characteristics as well as retention time.
 
-The scripts analyze the stability of synthetic pArg, fragmentation characteristics as well as retention time. 
+Please cite the following publication when using the respective scripts. 
+https://doi.org/10.1016/j.mcpro.2022.100232 
 
-**Extensive arginine phosphorylation in Staphylococcus aureus is influenced by Stp1**
+Widespread arginine phosphorylation in Staphylococcus aureus
 
-Nadine Prust<sup>1,2</sup>,  Pieter C. van Breugel<sup>1,2</sup> and Simone Lemeer<sup>1,2,#</sup>
+Nadine Prust1,2, Pieter C. van Breugel1,2 and Simone Lemeer1,2,#
 
-<sup>1</sup>**Biomolecular Mass Spectrometry and Proteomics**, Bijvoet Center for Biomolecular Research and Utrecht Institute for Pharmaceutical Sciences, Utrecht University, Padualaan 8, 3584 CH Utrecht, The Netherlands
-<sup>2</sup>**Netherlands Proteomics Center**, Padualaan 8, 3584 CH Utrecht, The Netherlands
+1Biomolecular Mass Spectrometry and Proteomics, Bijvoet Center for Biomolecular Research and Utrecht Institute for Pharmaceutical Sciences, Utrecht University, Padualaan 8, 3584 CH Utrecht, The Netherlands 2Netherlands Proteomics Center, Padualaan 8, 3584 CH Utrecht, The Netherlands
 
-*<sup>#</sup>Correspondence to: Simone Lemeer, s.m.lemeer@uu.nl*
+#Correspondence to: Simone Lemeer, s.m.lemeer@uu.nl
+
 
 ## Instructions for use
 
